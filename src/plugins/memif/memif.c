@@ -119,15 +119,14 @@ memif_disconnect (memif_if_t * mif, clib_error_t * err)
     {
       mq = vec_elt_at_index (mif->rx_queues, i);
       if (mq->ring)
-	{
-	  int rv;
-	  rv = vnet_hw_interface_unassign_rx_thread (vnm, mif->hw_if_index, i);
-	  if (rv)
-	    vlib_log_warn (mm->log_class,
-			   "Unable to unassign interface %d, queue %d: rc=%d",
-			   mif->hw_if_index, i, rv);
-	  mq->ring = 0;
-	}
+        {
+          int rv;
+          rv = vnet_hw_interface_enable_rx_queue (vnm, mif->hw_if_index, i, 1);
+          if (rv)
+            DBG_VNET ("Warning: unable to disable interface %d, "
+                      "queue %d: rc=%d", mif->hw_if_index, i, rv);
+          mq->ring = 0;
+        }
     }
 
   /* free tx and rx queues */
@@ -240,10 +239,10 @@ memif_connect (memif_if_t * mif)
 
       mq->ring = mif->regions[mq->region].shm + mq->offset;
       if (mq->ring->cookie != MEMIF_COOKIE)
-	{
-	  err = clib_error_return (0, "wrong cookie on tx ring %u", i);
-	  goto error;
-	}
+        {
+          err = clib_error_return (0, "wrong cookie on tx ring %u", i);
+          goto error;
+        }
 
       if (mq->int_fd > -1)
 	{
@@ -254,12 +253,10 @@ memif_connect (memif_if_t * mif)
 					 mif->dev_instance, i);
 	  memif_file_add (&mq->int_clib_file_index, &template);
 	}
-      vnet_hw_interface_assign_rx_thread (vnm, mif->hw_if_index, i, ~0);
-      rv = vnet_hw_interface_set_rx_mode (vnm, mif->hw_if_index, i,
-					  VNET_HW_INTERFACE_RX_MODE_DEFAULT);
+      rv = vnet_hw_interface_enable_rx_queue (vnm, mif->hw_if_index, i, 0);
       if (rv)
 	clib_warning
-	  ("Warning: unable to set rx mode for interface %d queue %d: "
+	  ("Warning: unable to enable rx for interface %d queue %d: "
 	   "rc=%d", mif->hw_if_index, i, rv);
       else
 	{

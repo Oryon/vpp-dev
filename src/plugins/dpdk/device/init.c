@@ -120,19 +120,6 @@ dpdk_flag_change (vnet_main_t * vnm, vnet_hw_interface_t * hi, u32 flags)
   return old;
 }
 
-static void
-dpdk_device_lock_init (dpdk_device_t * xd)
-{
-  int q;
-  vec_validate (xd->lockp, xd->tx_q_used - 1);
-  for (q = 0; q < xd->tx_q_used; q++)
-    {
-      xd->lockp[q] = clib_mem_alloc_aligned (CLIB_CACHE_LINE_BYTES,
-					     CLIB_CACHE_LINE_BYTES);
-      memset ((void *) xd->lockp[q], 0, CLIB_CACHE_LINE_BYTES);
-    }
-}
-
 static struct rte_mempool_ops *
 get_ops_by_name (char *ops_name)
 {
@@ -527,9 +514,6 @@ dpdk_lib_init (dpdk_main_t * dm)
       else
 	rte_eth_macaddr_get (i, (struct ether_addr *) addr);
 
-      if (xd->tx_q_used < tm->n_vlib_mains)
-	dpdk_device_lock_init (xd);
-
       xd->port_id = i;
       xd->device_index = xd - dm->devices;
       xd->per_interface_next_index = ~0;
@@ -645,15 +629,18 @@ dpdk_lib_init (dpdk_main_t * dm)
 	  int i;
 	  q = 0;
 	  clib_bitmap_foreach (i, devconf->workers, ({
-	    vnet_hw_interface_assign_rx_thread (dm->vnet_main, xd->hw_if_index, q++,
-					     vdm->first_worker_thread_index + i);
+	    vnet_hw_interface_set_rx_thread(dm->vnet_main, xd->hw_if_index,
+					    q++,
+					    vdm->first_worker_thread_index + i,
+					    0);
 	  }));
 	}
       else
 	for (q = 0; q < xd->rx_q_used; q++)
 	  {
-	    vnet_hw_interface_assign_rx_thread (dm->vnet_main, xd->hw_if_index, q,	/* any */
-						~1);
+	    vnet_hw_interface_set_rx_thread (dm->vnet_main,
+	                                     xd->hw_if_index,
+	                                     q++, ~0, 0); /* any */
 	  }
 
       /*Get vnet hardware interface */

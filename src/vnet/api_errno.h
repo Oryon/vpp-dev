@@ -143,6 +143,9 @@ _(BIER_BSL_UNSUP, -146, "BIER bit-string-length unsupported")		\
 _(INSTANCE_IN_USE, -147, "Instance in use")				\
 _(INVALID_SESSION_ID, -148, "session ID out of range")			\
 _(ACL_IN_USE_BY_LOOKUP_CONTEXT, -149, "ACL in use by a lookup context")	\
+_(INVALID_THREAD_INDEX, -150, "Invalid thread index")                   \
+_(INVALID_QUEUE_INDEX, -151, "Invalid queue index")                     \
+_(QUEUE_DISABLED, -152, "Queue is disabled")                            \
 
 typedef enum
 {

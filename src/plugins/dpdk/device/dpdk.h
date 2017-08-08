@@ -191,7 +191,6 @@ typedef struct
 typedef struct
 {
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
-  volatile u32 **lockp;
 
   /* Instance ID to access internal device array. */
   dpdk_portid_t device_index;

@@ -187,29 +187,24 @@ dpdk_validate_rte_mbuf (vlib_main_t * vm, vlib_buffer_t * b,
 static_always_inline
   u32 tx_burst_vector_internal (vlib_main_t * vm,
 				dpdk_device_t * xd,
+				vnet_interface_tx_queue_runtime_t * tx_queue,
 				struct rte_mbuf **mb, u32 n_left)
 {
   dpdk_main_t *dm = &dpdk_main;
   u32 n_retry;
   int n_sent = 0;
-  int queue_id;
+
+  /*
+   * This happens when no tx queues are available.
+   * But we shouldn't be here if that is the case.
+   */
+  ASSERT (tx_queue->queue_id != VNET_HW_INVALID_QUEUE);
 
   n_retry = 16;
-  queue_id = vm->thread_index;
 
   do
     {
-      /*
-       * This device only supports one TX queue,
-       * and we're running multi-threaded...
-       */
-      if (PREDICT_FALSE (xd->lockp != 0))
-	{
-	  queue_id = queue_id % xd->tx_q_used;
-	  while (__sync_lock_test_and_set (xd->lockp[queue_id], 1))
-	    /* zzzz */
-	    queue_id = (queue_id + 1) % xd->tx_q_used;
-	}
+      vnet_interface_tx_queue_lock (tx_queue);
 
       if (PREDICT_FALSE (xd->flags & DPDK_DEVICE_FLAG_HQOS))	/* HQoS ON */
 	{
@@ -226,7 +221,8 @@ static_always_inline
       else if (PREDICT_TRUE (xd->flags & DPDK_DEVICE_FLAG_PMD))
 	{
 	  /* no wrap, transmit in one burst */
-	  n_sent = rte_eth_tx_burst (xd->port_id, queue_id, mb, n_left);
+	  n_sent = rte_eth_tx_burst (xd->port_id, tx_queue->queue_id,
+				     mb, n_left);
 	}
       else
 	{
@@ -234,8 +230,7 @@ static_always_inline
 	  n_sent = 0;
 	}
 
-      if (PREDICT_FALSE (xd->lockp != 0))
-	*xd->lockp[queue_id] = 0;
+      vnet_interface_tx_queue_unlock (tx_queue);
 
       if (PREDICT_FALSE (n_sent < 0))
 	{
@@ -333,13 +328,15 @@ CLIB_MULTIARCH_FN (dpdk_interface_tx) (vlib_main_t * vm,
 				       vlib_frame_t * f)
 {
   dpdk_main_t *dm = &dpdk_main;
-  vnet_interface_output_runtime_t *rd = (void *) node->runtime_data;
+  vnet_interface_tx_runtime_t *rd = (void *) node->runtime_data;
   dpdk_device_t *xd = vec_elt_at_index (dm->devices, rd->dev_instance);
   u32 n_packets = f->n_vectors;
   u32 n_left;
   u32 *from;
   u32 thread_index = vm->thread_index;
-  int queue_id = thread_index;
+  vnet_interface_tx_queue_runtime_t *txqrt =
+      vnet_hw_interface_get_tx_queue (vm, rd);
+  int queue_id = txqrt->queue_id;
   u32 tx_pkts = 0, all_or_flags = 0;
   dpdk_per_thread_data_t *ptd = vec_elt_at_index (dm->per_thread_data,
 						  thread_index);
@@ -482,7 +479,7 @@ CLIB_MULTIARCH_FN (dpdk_interface_tx) (vlib_main_t * vm,
 
   /* transmit as many packets as possible */
   tx_pkts = n_packets = mb - ptd->mbufs;
-  n_left = tx_burst_vector_internal (vm, xd, ptd->mbufs, n_packets);
+  n_left = tx_burst_vector_internal (vm, xd, txqrt, ptd->mbufs, n_packets);
 
   {
     /* If there is no callback then drop any non-transmitted packets */

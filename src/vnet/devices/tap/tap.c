@@ -380,9 +380,8 @@ tap_create_if (vlib_main_t * vm, tap_create_if_args_t * args)
   hw->flags |= VNET_HW_INTERFACE_FLAG_SUPPORTS_INT_MODE;
   vnet_hw_interface_set_input_node (vnm, vif->hw_if_index,
 				    virtio_input_node.index);
-  vnet_hw_interface_assign_rx_thread (vnm, vif->hw_if_index, 0, ~0);
-  vnet_hw_interface_set_rx_mode (vnm, vif->hw_if_index, 0,
-				 VNET_HW_INTERFACE_RX_MODE_DEFAULT);
+
+  vnet_hw_interface_enable_rx_queue (vnm, vif->hw_if_index, 0, 0);
   vif->per_interface_next_index = ~0;
   vif->type = VIRTIO_IF_TYPE_TAP;
   vif->flags |= VIRTIO_IF_FLAG_ADMIN_UP;
@@ -434,7 +433,8 @@ tap_delete_if (vlib_main_t * vm, u32 sw_if_index)
   /* bring down the interface */
   vnet_hw_interface_set_flags (vnm, vif->hw_if_index, 0);
   vnet_sw_interface_set_flags (vnm, vif->sw_if_index, 0);
-  vnet_hw_interface_unassign_rx_thread (vnm, vif->hw_if_index, 0);
+
+  vnet_hw_interface_enable_rx_queue (vnm, vif->hw_if_index, 0, 1);
 
   ethernet_delete_interface (vnm, vif->hw_if_index);
   vif->hw_if_index = ~0;

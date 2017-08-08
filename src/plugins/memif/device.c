@@ -406,7 +406,7 @@ CLIB_MULTIARCH_FN (memif_interface_tx) (vlib_main_t * vm,
 					vlib_frame_t * frame)
 {
   memif_main_t *nm = &memif_main;
-  vnet_interface_output_runtime_t *rund = (void *) node->runtime_data;
+  vnet_interface_tx_runtime_t *rund = (void *) node->runtime_data;
   memif_if_t *mif = pool_elt_at_index (nm->interfaces, rund->dev_instance);
   memif_queue_t *mq;
   u32 thread_index = vlib_get_thread_index ();
@@ -469,7 +469,7 @@ memif_interface_rx_mode_change (vnet_main_t * vnm, u32 hw_if_index, u32 qid,
 
   if (mode == VNET_HW_INTERFACE_RX_MODE_POLLING)
     mq->ring->flags |= MEMIF_RING_FLAG_MASK_INT;
-  else
+  else if (mode != VNET_HW_INTERFACE_RX_MODE_DISABLED)
     mq->ring->flags &= ~MEMIF_RING_FLAG_MASK_INT;
 
   return 0;

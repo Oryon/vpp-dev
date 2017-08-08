@@ -789,19 +789,21 @@ vnet_register_interface (vnet_main_t * vnm,
 
       /* *INDENT-OFF* */
       foreach_vlib_main ({
-        vnet_interface_output_runtime_t *rt;
+        vnet_interface_output_runtime_t *ort;
+        vnet_interface_tx_runtime_t *txrt;
 
-	rt = vlib_node_get_runtime_data (this_vlib_main, hw->output_node_index);
-	ASSERT (rt->is_deleted == 1);
-	rt->is_deleted = 0;
-	rt->hw_if_index = hw_index;
-	rt->sw_if_index = hw->sw_if_index;
-	rt->dev_instance = hw->dev_instance;
+	ort = vlib_node_get_runtime_data (this_vlib_main, hw->output_node_index);
+	ASSERT (ort->is_deleted == 1);
+	ort->is_deleted = 0;
+	ort->hw_if_index = hw_index;
+	ort->sw_if_index = hw->sw_if_index;
+	ort->dev_instance = hw->dev_instance;
 
-	rt = vlib_node_get_runtime_data (this_vlib_main, hw->tx_node_index);
-	rt->hw_if_index = hw_index;
-	rt->sw_if_index = hw->sw_if_index;
-	rt->dev_instance = hw->dev_instance;
+	txrt = vlib_node_get_runtime_data (this_vlib_main, hw->tx_node_index);
+	txrt->hw_if_index = hw_index;
+	txrt->sw_if_index = hw->sw_if_index;
+	txrt->dev_instance = hw->dev_instance;
+	txrt->rss_mask = 0;
       });
       /* *INDENT-ON* */
 
@@ -832,17 +834,24 @@ vnet_register_interface (vnet_main_t * vnm,
   else
     {
       vlib_node_registration_t r;
-      vnet_interface_output_runtime_t rt = {
+      vnet_interface_output_runtime_t ort = {
 	.hw_if_index = hw_index,
 	.sw_if_index = hw->sw_if_index,
 	.dev_instance = hw->dev_instance,
 	.is_deleted = 0,
       };
+      vnet_interface_tx_runtime_t txrt = {
+	.hw_if_index = hw_index,
+	.sw_if_index = hw->sw_if_index,
+	.dev_instance = hw->dev_instance,
+	.rss_mask = 0,
+	.tx_queue_per_rss = 0,
+      };
 
       memset (&r, 0, sizeof (r));
       r.type = VLIB_NODE_TYPE_INTERNAL;
-      r.runtime_data = &rt;
-      r.runtime_data_bytes = sizeof (rt);
+      r.runtime_data = &txrt;
+      r.runtime_data_bytes = sizeof (txrt);
       r.scalar_size = 0;
       r.vector_size = sizeof (u32);
 
@@ -860,6 +869,8 @@ vnet_register_interface (vnet_main_t * vnm,
       r.name = output_node_name;
       r.function = vnet_interface_output_node_multiarch_select ();
       r.format_trace = format_vnet_interface_output_trace;
+      r.runtime_data = &ort;
+      r.runtime_data_bytes = sizeof (ort);
 
       {
 	static char *e[] = {
@@ -925,6 +936,10 @@ vnet_delete_hw_interface (vnet_main_t * vnm, u32 hw_if_index)
   vlib_main_t *vm = vnm->vlib_main;
   vnet_device_class_t *dev_class = vnet_get_device_class (vnm,
 							  hw->dev_class_index);
+
+  /* Remove all queues */
+  //FIXME: Disable all tx and rx queues
+
   /* If it is up, mark it down. */
   if (hw->flags != 0)
     vnet_hw_interface_set_flags (vnm, hw_if_index, /* flags */ 0);
@@ -955,18 +970,17 @@ vnet_delete_hw_interface (vnet_main_t * vnm, u32 hw_if_index)
     {
       /* Put output/tx nodes into recycle pool */
       vnet_hw_interface_nodes_t *dn;
-
       /* *INDENT-OFF* */
       foreach_vlib_main
 	({
-	  vnet_interface_output_runtime_t *rt =
-	    vlib_node_get_runtime_data (this_vlib_main, hw->output_node_index);
+     vnet_interface_output_runtime_t *ot =
+        vlib_node_get_runtime_data (this_vlib_main, hw->output_node_index);
 
-	  /* Mark node runtime as deleted so output node (if called)
-	   * will drop packets. */
-	  rt->is_deleted = 1;
-	});
-      /* *INDENT-ON* */
+      /* Mark node runtime as deleted so output node (if called)
+       * will drop packets. */
+      ot->is_deleted = 1;
+    });
+    /* *INDENT-ON* */
 
       vlib_node_rename (vm, hw->output_node_index,
 			"interface-%d-output-deleted", hw_if_index);
@@ -980,8 +994,8 @@ vnet_delete_hw_interface (vnet_main_t * vnm, u32 hw_if_index)
   hash_unset_mem (im->hw_interface_by_name, hw->name);
   vec_free (hw->name);
   vec_free (hw->hw_address);
-  vec_free (hw->input_node_thread_index_by_queue);
-  vec_free (hw->dq_runtime_index_by_queue);
+  vec_free (hw->rx_queues);
+  vec_free (hw->tx_queues);
 
   pool_put (im->hw_interfaces, hw);
 }

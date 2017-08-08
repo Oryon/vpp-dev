@@ -1004,7 +1004,8 @@ avf_delete_if (vlib_main_t * vm, avf_device_t * ad)
   if (ad->hw_if_index)
     {
       vnet_hw_interface_set_flags (vnm, ad->hw_if_index, 0);
-      vnet_hw_interface_unassign_rx_thread (vnm, ad->hw_if_index, 0);
+
+      vnet_hw_interface_enable_rx_queue (vnm, ad->hw_if_index, 0, 1);
       ethernet_delete_interface (vnm, ad->hw_if_index);
     }
 
@@ -1172,7 +1173,8 @@ avf_interface_admin_up_down (vnet_main_t * vnm, u32 hw_if_index, u32 flags)
       vnet_hw_interface_set_flags (vnm, ad->hw_if_index,
 				   VNET_HW_INTERFACE_FLAG_LINK_UP);
       ad->flags |= AVF_DEVICE_F_ADMIN_UP;
-      vnet_hw_interface_assign_rx_thread (vnm, ad->hw_if_index, 0, ~0);
+
+      vnet_hw_interface_enable_rx_queue (vnm, ad->hw_if_index, 0, 0);
     }
   else
     {
