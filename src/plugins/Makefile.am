@@ -107,6 +107,14 @@ if ENABLE_SRV6AS_PLUGIN
 include srv6_as.am
 endif
 
+if ENABLE_SRLB_PLUGIN
+include srlb.am
+endif
+
+if ENABLE_SRLB_AGENT_PLUGIN
+include srlb_agent.am
+endif
+
 if ENABLE_NAT_PLUGIN
 include nat.am
 endif

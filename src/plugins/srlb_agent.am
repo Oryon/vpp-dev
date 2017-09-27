@@ -1,0 +1,31 @@
+# Copyright (c) 2016 Cisco Systems, Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at:
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+vppplugins_LTLIBRARIES += srlb_agent_plugin.la
+
+srlb_agent_plugin_la_SOURCES =			\
+	srlb/srlb-sa.c			\
+	srlb/srlb-sa-node.c     \
+	srlb/srlb-sa-cli.c      \
+	srlb/srlb-common.c      \
+	srlb/srlb-sa-apache.c   \
+	srlb/srlb-sa-nginx.c
+
+	
+noinst_HEADERS +=			\
+	srlb/srlb-sa.h		    \
+	srlb/srlb-sa-apache.h       \
+	srlb/srlb-common.h
+
+
+# vi:syntax=automake
