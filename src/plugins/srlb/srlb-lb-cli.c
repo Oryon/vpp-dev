@@ -77,6 +77,7 @@ VLIB_CLI_COMMAND (srlb_vip_command, static) =
 	.path = "srlb lb vip",
 	.short_help = "srlb lb vip <vip-prefix> [sr <sr-prefix>] [consistent-hash-size <n>] [hash <vip|5-tuple>] [del]",
 	.function = srlb_vip_command_fn,
+	.is_mp_safe = 1,
     };
 
 static clib_error_t *
@@ -141,6 +142,7 @@ VLIB_CLI_COMMAND (srlb_server_command, static) =
 	.path = "srlb lb server",
 	.short_help = "srlb lb server <vip-prefix> <pool-list> (add|del) <s1> [<s2> [<s3> ...]]",
 	.function = srlb_server_command_fn,
+	.is_mp_safe = 1,
     };
 
 
@@ -198,6 +200,7 @@ VLIB_CLI_COMMAND (srlb_conf_command, static) =
 	.short_help = "srlb lb conf [fixed_entries <n>] "
 	    "[collision_buckets <n>] [active_timeout <s>] [teardown_timeout <s>]",
 	.function = srlb_conf_command_fn,
+	.is_mp_safe = 1,
     };
 
 static clib_error_t *

@@ -435,12 +435,14 @@ int srlb_sa_ai_conf(srlb_sa_ai_conf_args_t *args)
   if (sam->fq_as_index == ~0)
     {
       SRLB_SA_LOG_DEBUG("Initializing thread handoff queues");
+      vlib_worker_thread_barrier_sync (vlib_get_main());
       sam->fq_as_index =
           vlib_frame_queue_main_init (srlb_sa_as_node.index, 0);
       sam->fq_ca_index =
           vlib_frame_queue_main_init (srlb_sa_ca_node.index, 0);
       sam->fq_rs_index =
           vlib_frame_queue_main_init (srlb_sa_rs_node.index, 0);
+      vlib_worker_thread_barrier_release (vlib_get_main());
     }
 
   if (ai == NULL)

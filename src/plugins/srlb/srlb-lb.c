@@ -568,8 +568,7 @@ u32 srlb_get_server_index (srlb_lb_vip_t *vip, ip6_address_t *address)
   srlb_lb_main_t *srlbm = &srlb_lb_main;
   clib_bihash_kv_16_8_t kv, value;
   kv.key[0] = address->as_u64[0];
-  ((u32*)kv.key)[2] = address->as_u16[4];
-  ((u32*)kv.key)[3] = vip - srlbm->vips;
+  kv.key[1] = (vip - srlbm->vips) | (((u64) address->as_u16[4]) << 32);
 
   if (clib_bihash_search_16_8 (&srlbm->server_index_by_vip_and_address,
 			       &kv, &value))
@@ -599,8 +598,7 @@ srlb_server_free(srlb_lb_vip_t *vip, srlb_lb_server_t *s)
   /* Delete from hash table */
   clib_bihash_kv_16_8_t kv;
   kv.key[0] = s->address.as_u64[0];
-  ((u32*)kv.key)[2] = s->address.as_u16[4];
-  ((u32*)kv.key)[3] = vip - srlbm->vips;
+  kv.key[1] = (vip - srlbm->vips) | (((u64) s->address.as_u16[4]) << 32);
   clib_bihash_add_del_16_8 (&srlbm->server_index_by_vip_and_address,
                             &kv, 0 /* is_add */ );
 
@@ -655,8 +653,7 @@ srlb_server_alloc(srlb_lb_vip_t *vip, ip6_address_t *a)
   /* Add to hash table */
   clib_bihash_kv_16_8_t kv;
   kv.key[0] = s->address.as_u64[0];
-  ((u32*)kv.key)[2] = s->address.as_u16[4];
-  ((u32*)kv.key)[3] = vip - srlbm->vips;
+  kv.key[1] = (vip - srlbm->vips) | (((u64) s->address.as_u16[4]) << 32);
   kv.value = s - srlbm->servers;
 
   if (clib_bihash_add_del_16_8 (&srlbm->server_index_by_vip_and_address,
@@ -744,9 +741,8 @@ srlb_server_del(srlb_lb_vip_t *vip, u32 pool_bitmask,
         {
           /* Del from hash table */
           kv.key[0] = s->address.as_u64[0];
-          ((u32*)kv.key)[2] = s->address.as_u16[4];
-          ((u32*)kv.key)[3] = vip - srlbm->vips;
-          kv.value = (vip - srlbm->vips) | 1L << 32;
+          kv.key[1] = (vip - srlbm->vips) | (((u64) s->address.as_u16[4]) << 32);
+          kv.value = (s - srlbm->servers) | 1L << 32;
 
           /* Set server as removed in hash table */
           clib_bihash_add_del_16_8 (&srlbm->server_index_by_vip_and_address,
@@ -895,10 +891,12 @@ srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
   if (srlbm->fq_cs_index == ~0)
     {
       SRLB_LB_LOG_DEBUG("Initializing thread handoff queues");
+      vlib_worker_thread_barrier_sync (vlib_get_main());
       srlbm->fq_cs_index =
           vlib_frame_queue_main_init (srlb_cs_node.index, 0);
       srlbm->fq_ds_index =
           vlib_frame_queue_main_init (srlb_ds_node.index, 0);
+      vlib_worker_thread_barrier_release (vlib_get_main());
     }
 
   /* Apply default */

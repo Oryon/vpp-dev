@@ -693,8 +693,8 @@ srlb_cs_ds_node_fn (vlib_main_t * vm,
 	       * so we need to find out the server index.*/
 	      clib_bihash_kv_16_8_t kv, value;
 	      kv.key[0] = srh0->segments[1].as_u64[0];
-	      ((u32*)kv.key)[2] = srh0->segments[1].as_u16[4];
-	      ((u32*)kv.key)[3] = vnet_buffer (p0)->ip.adj_index[VLIB_TX];
+	      kv.key[1] = (vnet_buffer (p0)->ip.adj_index[VLIB_TX]) |
+	          (((u64) srh0->segments[1].as_u16[4]) << 32);
 	      value.value = 0; /* Will stay to 0 in case of lookup failure */
 
 	      clib_bihash_search_16_8 (&srlbm->server_index_by_vip_and_address,
