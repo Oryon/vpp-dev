@@ -297,6 +297,32 @@ VLIB_CLI_COMMAND (srlb_show_sa_ai_command, static) =
 	.function = srlb_show_sa_ai_command_fn,
     };
 
+static clib_error_t *
+srlb_show_sa_counters_command_fn (vlib_main_t * vm,
+                                  unformat_input_t * input,
+                                  vlib_cli_command_t * cmd)
+{
+  srlb_sa_main_t * sam = &srlb_sa_main;
+  u8 *s = 0;
+
+#define _(t,str) s = format(s, str": %lu\n", \
+  vlib_get_simple_counter(&sam->counters, SRLB_SA_CTR_##t));
+  srlb_sa_foreach_counter
+#undef _
+
+  vlib_cli_output(vm, "%v", s);
+  vec_free(s);
+  return 0;
+}
+
+VLIB_CLI_COMMAND (srlb_show_sa_counters_command, static) =
+    {
+        .path = "show srlb sa counters",
+        .short_help = "show srlb sa counters",
+        .function = srlb_show_sa_counters_command_fn,
+    };
+
+
 
 static clib_error_t *
 srlb_show_sa_accept_policies_command_fn (vlib_main_t * vm,

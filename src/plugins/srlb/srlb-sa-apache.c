@@ -213,7 +213,8 @@ srlb_sa_apache_policy_delete (srlb_sa_apache_policy_t * p)
 }
 
 static int
-srlb_sa_apache_policy_accept_fn(u32 ai_index, u32 remaining_choices)
+srlb_sa_apache_policy_accept_fn(u32 ai_index, u32 remaining_choices,
+                                u64 vip_low)
 {
   u32 opaque = srlb_sa_main.ais[ai_index].policy_opaque;
   srlb_sa_apache_policy_t * p = srlb_sa_apache_policy_get_by_opaque(opaque);

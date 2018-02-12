@@ -222,21 +222,24 @@ int srlb_sa_accept_policy_register(srlb_sa_accept_policy_t *policy,
 }
 
 static int srlb_sa_ap_always_accept_fn(CLIB_UNUSED(u32 ai_index),
-				       CLIB_UNUSED(u32 remaining_choices))
+				       CLIB_UNUSED(u32 remaining_choices),
+				       CLIB_UNUSED(u64 vip_low))
 {
   return 0;
 }
 
 static int srlb_sa_ap_always_reject_fn(CLIB_UNUSED(u32 ai_index),
-				       CLIB_UNUSED(u32 remaining_choices))
+				       CLIB_UNUSED(u32 remaining_choices),
+				       CLIB_UNUSED(u64 vip_low))
 {
   return -1;
 }
 
 static int srlb_sa_ap_only_last_fn(CLIB_UNUSED(u32 ai_index),
-				   u32 remaining_choices)
+				   u32 remaining_choices,
+				   CLIB_UNUSED(u64 vip_low))
 {
-  clib_warning("Hunting request for %d rem %d", ai_index, remaining_choices);
+  SRLB_SA_LOG_DATA("Hunting request for %d rem %d", ai_index, remaining_choices);
   return (remaining_choices == 0) ? 0 : -1;
 }
 

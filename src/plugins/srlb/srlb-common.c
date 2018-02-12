@@ -39,12 +39,12 @@ uword
 unformat_verbosity (unformat_input_t * input, va_list * args)
 {
   int *v = va_arg (*args, int *);
-  if (unformat (input, "verbose"))
+  if (unformat (input, "verbose %d", v))
+      ;
+  else if (unformat (input, "verbose"))
     *v = 1;
   else if (unformat (input, "very-verbose"))
     *v = 2;
-  else if (unformat (input, "verbose %d", v))
-    ;
   else if (unformat (input, "v%d", v))
     ;
   else

@@ -31,7 +31,7 @@
 #define SRLB_SA_HANDOFF_CORE_OFFSET 26
 #define SRLB_SA_HANDOFF_CORE_MASK 0xfc000000
 
-#define SRLB_SA_LOG_ENABLE_DATA 0
+#define SRLB_SA_LOG_ENABLE_DATA (CLIB_DEBUG > 0)
 #define SRLB_SA_LOG_DEFAULT_LEVEL 0
 
 #define SRLB_SA_LOG(level, args...) do {\
@@ -307,9 +307,12 @@ typedef struct {
    * ai_index is the Application Instance index.
    * remaining_choices is the number of remaining servers in the hunting list
    * (not including the current one).
+   * The configured policy opaque index can be retrieved as
+   * srlb_sa_main.ais[ai_index].policy_opaque.
+   * vip_low is the lowest 64 bits part of the destination IP address.
    * Returns 0 when the connection should be accepted.
    */
-  int (*accept)(u32 ai_index , u32 remaining_choices);
+  int (*accept)(u32 ai_index , u32 remaining_choices, u64 vip_low);
 
   /**
    * A description of the policy.
@@ -331,9 +334,9 @@ typedef enum {
   _(MOVED, "moved-flow") \
   _(ACCEPTED, "accepted") \
   _(REJECTED, "rejected") \
-  _(RECOVERED, "recovered") \
-  _(AS, "ack-stickiness-sent") \
-  _(DS, "delete-stickiness-sent") \
+  _(RECOVERED, "recovered (Not implemented)") \
+  _(AS, "ack-stickiness-sent (Not implemented)") \
+  _(DS, "delete-stickiness-sent (Not implemented)") \
   _(HANDOFF, "packet-handoff")
 
 /* SRLB LB counter indexes */

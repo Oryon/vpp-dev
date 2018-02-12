@@ -367,6 +367,8 @@ srlb_sa_sr_node_fn (vlib_main_t * vm,
 
   u32 table_overflows = 0;
   u32 moved_flows = 0;
+  u32 accept = 0;
+  u32 reject = 0;
 
   while (n_left_from > 0)
     {
@@ -499,7 +501,8 @@ srlb_sa_sr_node_fn (vlib_main_t * vm,
 	      /* FIXME: Define and use acceptation API */
 	      srlb_sa_ai_t *ai0 = &sam->ais[val0->ai_index];
 	      accept0 = !sam->accept_policies[ai0->policy_index].
-		  accept(ai0 - sam->ais, srh0->segments_left - arg_sid0 - 2);
+		  accept(ai0 - sam->ais, srh0->segments_left - arg_sid0 - 2,
+		         srh0->segments[arg_sid0].as_u64[1]);
 	    }
 	  else /* fn == SRLB_SA_FN_RECOVER_STICKINESS */
 	    {
@@ -520,6 +523,9 @@ srlb_sa_sr_node_fn (vlib_main_t * vm,
 	      tr->entry = ei0;
 	      tr->lifetime = flowhash_timeout(h, ei0) - time_now;
 	    }
+
+	  accept += accept0;
+	  reject += !accept0;
 
 	  if (fn == SRLB_SA_FN_ACK_STICKINESS || PREDICT_TRUE(accept0))
 	    {
@@ -594,6 +600,15 @@ srlb_sa_sr_node_fn (vlib_main_t * vm,
 	}
       vlib_put_next_frame (vm, node, next_index, n_left_to_next);
     }
+
+  vlib_increment_simple_counter(&sam->counters, vm->thread_index,
+                                SRLB_SA_CTR_ACCEPTED, accept);
+  vlib_increment_simple_counter(&sam->counters, vm->thread_index,
+                                SRLB_SA_CTR_REJECTED, reject);
+  vlib_increment_simple_counter(&sam->counters, vm->thread_index,
+                                SRLB_SA_CTR_OVERFLOW, table_overflows);
+  vlib_increment_simple_counter(&sam->counters, vm->thread_index,
+                                SRLB_SA_CTR_MOVED, moved_flows);
 
   return frame->n_vectors;
 }

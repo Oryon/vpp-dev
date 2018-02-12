@@ -24,7 +24,7 @@
 #include <vppinfra/bihash_16_8.h>
 #include <vnet/util/refcount.h>
 
-#define SRLB_LB_LOG_ENABLE_DATA 0
+#define SRLB_LB_LOG_ENABLE_DATA (CLIB_DEBUG > 0)
 #define SRLB_LB_LOG_DEFAULT_LEVEL 0
 
 #define SRLB_LB_LOG(level, args...) do {\
