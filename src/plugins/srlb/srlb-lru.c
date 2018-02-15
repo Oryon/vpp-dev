@@ -178,7 +178,7 @@ void srlb_lru_lookup_and_promote (srlb_lru_t *lru,
   srlb_lru_elem_t *e;
   k.key = key;
   flowhash_get_8_4(lru->hash, &k, flowhash_hash_8_4(&k), 1, hash_index);
-  if (PREDICT_FALSE(!flowhash_is_valid_entry_index(lru->hash, *hash_index)))
+  if (PREDICT_FALSE(flowhash_is_overflow(*hash_index)))
     {
       *previous_category = SRLB_LRU_CAT_N;
       return;
@@ -265,8 +265,8 @@ void srlb_lru_lookup_and_promote (srlb_lru_t *lru,
           /* Remove from LRU if moved after last category. */
           if (PREDICT_FALSE(prev->category == SRLB_LRU_CAT_N))
             {
+              flowhash_timeout(lru->hash, prev->hash_index) = 0;
               prev->hash_index = FLOWHASH_INVALID_ENTRY_INDEX;
-              flowhash_timeout(lru->hash, *hash_index) = 0;
             }
 
           /* The previous element is big enough to absorb what remains
@@ -300,11 +300,17 @@ uword unformat_sixcn_lru_category(unformat_input_t * input, va_list * args)
   return 0;
 }
 
-u8 *format_srlb_lru_entry(u8 * s, va_list * va)
+#define FORMAT_NEWLINE(s, i) format(s, "\n%U", format_white_space, i)
+#define FORMAT_WNL(s, i, ...) format(FORMAT_NEWLINE(s, i), __VA_ARGS__)
+
+u8 *format_srlb_lru_entry_with_verbosity(u8 * s, va_list * va)
 {
   srlb_lru_t *lru = va_arg (*va, srlb_lru_t *);
   srlb_lru_elem_t *e = va_arg (*va, srlb_lru_elem_t *);
+  int v = va_arg (*va, int);
   u64 id;
+  int indent = format_get_indent (s);
+
   if (e->hash_index == FLOWHASH_INVALID_ENTRY_INDEX)
     s = format(s, "empty %U", format_srlb_lru_category, e->category);
   else
@@ -314,11 +320,14 @@ u8 *format_srlb_lru_entry(u8 * s, va_list * va)
                  format_srlb_lru_category, e->category);
     }
 
+  if (v >= 1)
+    {
+      s = FORMAT_WNL(s, indent, "  hash-index: %u prev: %u next: %u",
+                     e->hash_index, e->previous, e->next);
+    }
+
   return s;
 }
-
-#define FORMAT_NEWLINE(s, i) format(s, "\n%U", format_white_space, i)
-#define FORMAT_WNL(s, i, ...) format(FORMAT_NEWLINE(s, i), __VA_ARGS__)
 
 u8 *format_srlb_lru_with_verbosity(u8 * s, va_list * va)
 {
@@ -349,7 +358,7 @@ u8 *format_srlb_lru_with_verbosity(u8 * s, va_list * va)
       s = FORMAT_WNL(s, indent, "elements:");
       srlb_lru_elem_t *e;
       srlb_lru_foreach(lru, e)
-        s = FORMAT_WNL(s, indent, "  [%u] %U", e - lru->elts, format_srlb_lru_entry, lru, e);
+        s = FORMAT_WNL(s, indent, "  [%u] %U", e - lru->elts, format_srlb_lru_entry_with_verbosity, lru, e, v - 1);
     }
 
   return s;

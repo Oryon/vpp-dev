@@ -48,10 +48,11 @@ static int srlb_sa_ap_lru_accept_fn(u32 ai_index,
                               &previous_category);
 
   u8 accept = previous_category == 0 || remaining_choices == 0;
-  SRLB_SA_LOG_DATA("ai_index: %d remaining_choices: %d vip_low: %U category: %U -> %s",
+  SRLB_SA_LOG_DATA("ai_index: %d remaining_choices: %d vip_low: %U category: %U hash-index: %u -> %s",
                    ai_index, remaining_choices,
                    format_half_ip6_address, vip_low,
                    format_srlb_lru_category, previous_category,
+                   hash_index,
                    accept?"accept":"reject");
 
   return !accept;
@@ -202,7 +203,7 @@ u8 *format_srlb_sa_lru_policy_with_verbosity (u8 *s, va_list * args)
   uword i = format_get_indent (s);
 
   s = format(s, "threshold: %d", lru->threshold);
-  s = FORMAT_WNL(s, i, "mask: %U", format_half_ip6_address, &lru->os_mask);
+  s = FORMAT_WNL(s, i, "mask: %U", format_half_ip6_address, lru->os_mask);
   s = FORMAT_WNL(s, i, "add: %d", lru->os_add);
   s = FORMAT_WNL(s, i, "exp: %d", lru->os_exp);
   s = FORMAT_WNL(s, i, "entries: %d", lru->entries);

@@ -174,7 +174,7 @@ void srlb_lru_lookup_and_promote (srlb_lru_t *lru,
     pool_elt_at_index((lru)->elts, \
                       flowhash_value((lru)->hash, hash_index)->list_index)
 
-u8 *format_srlb_lru_entry (u8 * s, va_list * va);
+u8 *format_srlb_lru_entry_with_verbosity (u8 * s, va_list * va);
 u8 *format_srlb_lru_with_verbosity (u8 * s, va_list * va);
 uword unformat_srlb_lru_sizes (unformat_input_t * input, va_list * args);
 
