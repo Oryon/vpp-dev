@@ -19,7 +19,7 @@ This document focuses on the implementation and usability aspects of SRLB VPP Pl
 - [The Power of Two Choices in Randomized Load Balancing](https://www.eecs.harvard.edu/~michaelm/postscripts/tpds2001.pdf)
 - [Google's Maglev](https://research.google.com/pubs/pub44824.html)
 - [SRLB: The Power of Choices in Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/7980143/)
-- 6LB: Scalable and Application-Aware Load Balancing with Segment Routing
+- [6LB: Scalable and Application-Aware Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/8293698/)
 
 ### Authors
 - Pierre Pfister <ppfister@cisco.com>
@@ -264,11 +264,11 @@ srlb sa nginx-policy opaque <opaque> [pid <pid>] [threshold <threshold>] [del]
 
 In this case, the policy instance id, called opaque, is provided by the user. The same value must be provided when configuring the `accept-policy` of a given application in order to bind it with the right policy instance.
 
-### Least Frequently Used (lru) policies
+### Least Recently Used (lru) policies
 
-The Least Frequently Used policy is meant for contexts where requests are made toward a large set of different IPv6 VIP addresses, and where the application should only accept connections for the most popular VIP addresses.
+The Least Recently Used policy is meant for contexts where requests are made toward a large set of different IPv6 VIP addresses, and where the application should only accept connections for the most popular VIP addresses.
 
-A *Least Frequently Used filter* is used in order to decide whether a given VIP address is popular enough to be accepted. Such filter can be seen as a list of elements. Every time a connection request is performed for a certain VIP address, the address is looked-up in the LRU list. If the element is found early enough in the list, it is considered popular, the connection is accepted, and the element is moved to the very-top of the list. If the element is not found, or is found too deep in the LRU, the connection is rejected, but the element is still put on top of the list. As a consequence, a given connection will be accepted whenever a previous request was received in a recent timeframe.
+A *Least Recently Used filter* is used in order to decide whether a given VIP address is popular enough to be accepted. Such filter can be seen as a list of elements. Every time a connection request is performed for a certain VIP address, the address is looked-up in the LRU list. If the element is found early enough in the list, it is considered popular, the connection is accepted, and the element is moved to the very-top of the list. If the element is not found, or is found too deep in the LRU, the connection is rejected, but the element is still put on top of the list. As a consequence, a given connection will be accepted whenever a previous request was received in a recent timeframe.
 
 In order to define what *popular* means, every VIP address is associated with a cost which is derived from the VIP address with the following formula:
 ```
