@@ -253,16 +253,48 @@ The following policies are implemented for test and simple deployment purposes, 
 
 ### Nginx and Apache policies
 
-The SRLB Server Agent plugin implements Accept Policies plugging into Apache and Nginx shared memory scoreboard. Those policies are called *apache-threashold* and *nginx-threshold* and accept new connections requests whenever the number of HTTP busy threads is below or equal to a certain threashold.
+The SRLB Server Agent plugin implements Accept Policies plugging into Apache or Nginx shared memory scoreboard. Those policies are called *apache-threashold* and *nginx-threshold* and accept new connections requests whenever the number of HTTP busy threads is below or equal to a certain threashold (or, as last resort, when the instance is last in the SR list).
 
-Instances of such policy are created with the following commands:
+Instances of such policies are created with the following commands:
 
 ```
 srlb sa apache-policy opaque <opaque> [scoreboard <scoreboard_file>] [threshold <threshold>] [namespace_pid <pid>] [del]
 srlb sa nginx-policy opaque <opaque> [pid <pid>] [threshold <threshold>] [del]
 ```
 
-In this case, the policy instance id, called opaque, is provided by the user. The same value must be provided when configuring the `accept-policy` of a given application in order to bind it with the right policy instance.
+In this case, the policy instance id, called `opaque`, is provided by the user. The same value must be provided when configuring the `accept-policy` of a given application in order to bind it with the right policy instance. The `opaque` parameter must be specified upon policy creation and deletion.
+
+When creating the policy, the `threshold` parameter *must* be set, to the desired threshold above which connections are refused.
+
+For the Apache policy, the `scoreboard` parameter *must* be set when creating the policy, and should referer to the shared memory file in which Apache publishes metrics about current connections. This must match the `ScoreBoardFile` parameter of Apache's `httpd.conf` file. The `namespace_pid` is an _optional_ parameter specifying the PID of the Apache process, if it is running inside a namespace (_e.g.,_ if using Docker containers). This allows VPP to enter the corresponding namespace and fetch the shared memory file from there.
+
+For the Nginx policy, unfortunately nginx does not provide a named shared memory to read statistics from, but does use an internal, anonymous shared memory. Hence, the `pid` parameter *must* be set to nginx's PID when creating the policy. VPP will then try to map nginx internal shared memory by inspecting the open pages of the process. Note that the PID as viewed from the host namespace must be provided, regardless of whether nginx is running in a separate namespace or not.
+
+Here is an example of how to set a Docker container with Apache, and bind it to an SRLB Apache policy:
+```
+$ cat > Dockerfile << EOF
+FROM httpd
+RUN echo "ScoreBoardFile scoreboard" >> /usr/local/apache2/conf/httpd.conf
+EOF
+$ docker build -t my-apache2 .
+$ docker run --name apache2-test my-apache2
+$ PID=$(docker inspect -f '{{.State.Pid}}' apache2-test)
+$ vppctl srlb sa apache-policy opaque 123 scoreboard /usr/local/apache2/scoreboard threshold 4 namespace_pid $PID
+$ vppctl srlb sa application 2001:db8:ffff:2:1::/80 via 2001:db8:aaaa:3::1 policy apache-threshold 123
+```
+In addition, it is necessary to add an interface in the container and connect it to VPP. Although several methods exist, here is an example of how this can be done, with a tap interface ``tapapache0``:
+```
+$ sudo mkdir /var/run/netns
+$ sudo ln -s /proc/$PID/ns/net /var/run/netns/$PID
+$ VPPTAP=$(vppctl tap connect tapapache0)
+$ vppctl set interface ip address $VPPTAP 2001:db8:aaaa:3::2/64
+$ vppctl set interface state $VPPTAP up
+$ sudo ip link set tapapache0 netns $PID
+$ sudo ip netns exec $PID ifconfig tapapache0 add 2001:db8:aaaa:3::1/64 up
+$ sudo ip netns exec $PID ip -6 route add default via 2001:db8:aaaa:3::2
+$ sudo rm /var/run/netns/$PID
+```
+
 
 ### Least Recently Used (lru) policies
 
