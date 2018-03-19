@@ -20,6 +20,7 @@ srlb_agent_plugin_la_SOURCES =			\
 	srlb/srlb-common.c      \
 	srlb/srlb-sa-apache.c   \
 	srlb/srlb-sa-nginx.c    \
+	srlb/srlb-sa-cpuacct.c  \
 	srlb/srlb-lru.c         \
 	srlb/srlb-sa-lru.c
 
