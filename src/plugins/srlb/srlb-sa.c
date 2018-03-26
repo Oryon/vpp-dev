@@ -250,50 +250,19 @@ srlb_sa_add_sr_adjacencies(srlb_sa_ai_t *ai)
   dpo_id_t dpo = DPO_INVALID;
   fib_prefix_t pfx = {
     .fp_addr.ip6 = ai->sr_prefix,
-    .fp_len = 84,
+    .fp_len = 80,
     .fp_proto = FIB_PROTOCOL_IP6,
   };
 
   /* Connect and recover do not have specific cores. Only the
    * function is matched. */
   srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_SA_FN_CONNECT_IF_AVAILABLE);
-  dpo_set(&dpo, sam->dpo_handoff_ca_type, DPO_PROTO_IP6, ai - sam->ais);
+  dpo_set(&dpo, sam->dpo_handoff_type, DPO_PROTO_IP6, ai - sam->ais);
   fib_table_entry_special_dpo_add(0, &pfx,
 				  FIB_SOURCE_PLUGIN_HI,
 				  FIB_ENTRY_FLAG_EXCLUSIVE,
 				  &dpo);
   dpo_reset(&dpo);
-
-  srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_SA_FN_RECOVER_STICKINESS);
-  dpo_set(&dpo, sam->dpo_handoff_rs_type, DPO_PROTO_IP6, ai - sam->ais);
-  fib_table_entry_special_dpo_add(0, &pfx,
-				  FIB_SOURCE_PLUGIN_HI,
-				  FIB_ENTRY_FLAG_EXCLUSIVE,
-				  &dpo);
-  dpo_reset(&dpo);
-
-  /* Ack stickyness includes core and has the offset set to 0 */
-  pfx.fp_len = 96;
-
-  vlib_thread_main_t *tm = vlib_get_thread_main();
-  u32 thread_index;
-  u32 adj_index;
-
-  for (thread_index = 0; thread_index < tm->n_vlib_mains; thread_index++)
-    {
-      pfx.fp_addr.ip6.as_u8[11] = thread_index;
-      adj_index = thread_index << SRLB_SA_HANDOFF_CORE_OFFSET;
-      adj_index |= ai - sam->ais;
-
-      srlb_sr_set_fn_and_offset(&pfx.fp_addr.ip6,
-                                SRLB_SA_FN_ACK_STICKINESS, 0);
-      dpo_set(&dpo, sam->dpo_handoff_as_type, DPO_PROTO_IP6, adj_index);
-      fib_table_entry_special_dpo_add(0, &pfx,
-                                      FIB_SOURCE_PLUGIN_HI,
-                                      FIB_ENTRY_FLAG_EXCLUSIVE,
-                                      &dpo);
-      dpo_reset(&dpo);
-    }
 }
 
 static inline void
@@ -301,17 +270,10 @@ srlb_sa_del_sr_adjacencies(srlb_sa_ai_t *ai)
 {
   fib_prefix_t pfx = {
       .fp_addr.ip6 = ai->sr_prefix,
-      .fp_len = 84,
+      .fp_len = 80,
       .fp_proto = FIB_PROTOCOL_IP6,
   };
 
-  srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_SA_FN_CONNECT_IF_AVAILABLE);
-  fib_table_entry_special_remove(0, &pfx, FIB_SOURCE_PLUGIN_HI);
-
-  srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_SA_FN_RECOVER_STICKINESS);
-  fib_table_entry_special_remove(0, &pfx, FIB_SOURCE_PLUGIN_HI);
-
-  srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_SA_FN_ACK_STICKINESS);
   fib_table_entry_special_remove(0, &pfx, FIB_SOURCE_PLUGIN_HI);
 }
 
@@ -435,15 +397,15 @@ int srlb_sa_ai_conf(srlb_sa_ai_conf_args_t *args)
       return 0;
     }
 
-  if (sam->fq_as_index == ~0)
+  if (sam->fq_indexes[0] == ~0)
     {
       SRLB_SA_LOG_DEBUG("Initializing thread handoff queues");
       vlib_worker_thread_barrier_sync (vlib_get_main());
-      sam->fq_as_index =
+      sam->fq_indexes[SRLB_SA_FN_ACK_STICKINESS] =
           vlib_frame_queue_main_init (srlb_sa_as_node.index, 0);
-      sam->fq_ca_index =
+      sam->fq_indexes[SRLB_SA_FN_CONNECT_IF_AVAILABLE] =
           vlib_frame_queue_main_init (srlb_sa_ca_node.index, 0);
-      sam->fq_rs_index =
+      sam->fq_indexes[SRLB_SA_FN_RECOVER_STICKINESS] =
           vlib_frame_queue_main_init (srlb_sa_rs_node.index, 0);
       vlib_worker_thread_barrier_release (vlib_get_main());
     }
@@ -600,9 +562,8 @@ srlb_sa_init (vlib_main_t * vm)
 
   sam->log_level = SRLB_SA_LOG_DEFAULT_LEVEL;
 
-  sam->fq_as_index = ~0;
-  sam->fq_ca_index = ~0;
-  sam->fq_rs_index = ~0;
+  for (i = 0; i < ARRAY_LEN(sam->fq_indexes); i++)
+    sam->fq_indexes[i] = ~0;
 
   return NULL;
 }

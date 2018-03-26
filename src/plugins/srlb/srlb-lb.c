@@ -503,38 +503,16 @@ srlb_vip_add_adjacencies(srlb_lb_vip_t * vip)
 
   fib_prefix_t pfx = {
       .fp_addr.ip6 = vip->sr_prefix,
-      .fp_len = 96,
+      .fp_len = 80,
       .fp_proto = FIB_PROTOCOL_IP6,
   };
 
-
-  vlib_thread_main_t *tm = vlib_get_thread_main();
-  u32 thread_index;
-  u32 adj_index;
-
-  for (thread_index = 0; thread_index < tm->n_vlib_mains; thread_index++)
-    {
-      pfx.fp_addr.ip6.as_u8[11] = thread_index;
-      adj_index = thread_index << SRLB_LB_HANDOFF_CORE_OFFSET;
-      adj_index |= vip - srlbm->vips;
-
-      srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_LB_FN_CREATE_STICKINESS);
-      dpo_set(&dpo, srlbm->dpo_handoff_type, DPO_PROTO_IP6, adj_index);
-      fib_table_entry_special_dpo_add(0, &pfx,
-                                      FIB_SOURCE_PLUGIN_HI,
-                                      FIB_ENTRY_FLAG_EXCLUSIVE,
-                                      &dpo);
-      dpo_reset(&dpo);
-
-      adj_index |= SRLB_LB_HANDOFF_DS_MASK;
-      srlb_sr_set_fn(&pfx.fp_addr.ip6, SRLB_LB_FN_DELETE_STICKINESS);
-      dpo_set(&dpo, srlbm->dpo_handoff_type, DPO_PROTO_IP6, adj_index);
-      fib_table_entry_special_dpo_add(0, &pfx,
-                                      FIB_SOURCE_PLUGIN_HI,
-                                      FIB_ENTRY_FLAG_EXCLUSIVE,
-                                      &dpo);
-      dpo_reset(&dpo);
-    }
+  dpo_set(&dpo, srlbm->dpo_handoff_type, DPO_PROTO_IP6, vip - srlbm->vips);
+  fib_table_entry_special_dpo_add(0, &pfx,
+                                  FIB_SOURCE_PLUGIN_HI,
+                                  FIB_ENTRY_FLAG_EXCLUSIVE,
+                                  &dpo);
+  dpo_reset(&dpo);
 }
 
 static void

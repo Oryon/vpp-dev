@@ -10,11 +10,13 @@ u8 *format_srlb_sa_function (u8 * s, va_list * args)
       n = "SA.CA 'Connect if Available'";
       break;
     case SRLB_SA_FN_ACK_STICKINESS:
-         n = "SA.AS 'Acknowledge Stickiness'";
-         break;
+      n = "SA.AS 'Acknowledge Stickiness'";
+      break;
     case SRLB_SA_FN_RECOVER_STICKINESS:
-         n = "SA.RS 'Recover Stickiness'";
-         break;
+      n = "SA.RS 'Recover Stickiness'";
+      break;
+    default:
+      return format(s, "Unknown (%d)", fun);
   }
   return format(s, "%s", n);
 }
@@ -30,6 +32,8 @@ u8 *format_srlb_lb_function (u8 * s, va_list * args)
     case SRLB_LB_FN_DELETE_STICKINESS:
       n = "LB.DS 'Delete Stickiness'";
       break;
+    default:
+      return format(s, "Unknown (%d)", fun);
   }
   return format(s, "%d", n);
 }

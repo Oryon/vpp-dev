@@ -28,9 +28,6 @@
  */
 #define SRLB_SA_OPTION_FORWARD_WHEN_NO_STATE 1
 
-#define SRLB_SA_HANDOFF_CORE_OFFSET 26
-#define SRLB_SA_HANDOFF_CORE_MASK 0xfc000000
-
 #define SRLB_SA_LOG_ENABLE_DATA (CLIB_DEBUG > 0)
 #define SRLB_SA_LOG_DEFAULT_LEVEL 0
 
@@ -279,9 +276,7 @@ u8 *format_srlb_sa_flows_with_verbosity (u8 *s, va_list * args);
  * The AS DPO is used to send packets to the fib (to AIs).
  */
 #define foreach_srlb_sa_dpo \
-  _(handoff_ca, "srlb-sa-handoff-ca") \
-  _(handoff_rs, "srlb-sa-handoff-rs") \
-  _(handoff_as, "srlb-sa-handoff-as") \
+  _(handoff, "srlb-sa-handoff") \
   _(as, "srlb-sa-as")
 
 /**
@@ -362,9 +357,7 @@ typedef struct {
   srlb_sa_accept_policy_t *accept_policies;
 
   /* handoff queue indexes */
-  u32 fq_ca_index;
-  u32 fq_as_index;
-  u32 fq_rs_index;
+  u32 fq_indexes[3];
 
   /* Flow timeout in seconds */
   u32 flow_active_timeout;

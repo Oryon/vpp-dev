@@ -703,6 +703,33 @@ VLIB_REGISTER_NODE (srlb_sa_as_node) =
 	.sibling_of = "srlb-sa-ca"
     };
 
+/** SRLB SA Handoff node */
+
+enum {
+  SRLB_SA_HANDOFF_NEXT_CA = SRLB_SA_FN_CONNECT_IF_AVAILABLE,
+  SRLB_SA_HANDOFF_NEXT_RS = SRLB_SA_FN_RECOVER_STICKINESS,
+  SRLB_SA_HANDOFF_NEXT_AS = SRLB_SA_FN_ACK_STICKINESS,
+  SRLB_SA_HANDOFF_NEXT_DROP,
+  SRLB_SA_HANDOFF_NEXT_N,
+};
+
+#define foreach_srlb_sa_handoff_error \
+                _(NONE, "no error") \
+                _(INVALID_THREAD_INDEX, "invalid thread index") \
+                _(INVALID_FUNCTION, "invalid function")
+
+typedef enum {
+#define _(sym,str) SRLB_SA_HANDOFF_ERROR_##sym,
+  foreach_srlb_sa_handoff_error
+#undef _
+  SRLB_SA_HANDOFF_N_ERROR,
+} srlb_sa_handoff_error_t;
+
+static char *srlb_sa_handoff_error_strings[] = {
+#define _(sym,string) string,
+    foreach_srlb_sa_handoff_error
+#undef _
+};
 
 typedef struct {
   u32 from_worker_index;
@@ -713,11 +740,11 @@ typedef struct {
 static uword
 srlb_sa_handoff_node_fn (vlib_main_t * vm,
                          vlib_node_runtime_t * node,
-                         vlib_frame_t * frame,
-                         srlb_sa_function_t fn)
+                         vlib_frame_t * frame)
 {
   srlb_sa_main_t *sam = &srlb_sa_main;
   u32 thread_index = vm->thread_index;
+  u32 thread_max = vlib_get_thread_main()->n_vlib_mains;
 
   /* Where to get packets from */
   u32 *from = vlib_frame_vector_args (frame);
@@ -725,6 +752,7 @@ srlb_sa_handoff_node_fn (vlib_main_t * vm,
 
   /* Enqueue to another thread thread */
   u32 current_worker_index = ~0;
+  srlb_sa_function_t current_fn = 0;
   vlib_frame_queue_elt_t *hf = 0;
 
   /* Enqueue to the same thread */
@@ -739,23 +767,29 @@ srlb_sa_handoff_node_fn (vlib_main_t * vm,
     {
       u32 pi0;
       vlib_buffer_t *p0;
+      ip6_header_t *ip60;
       u32 next_worker_index;
+      u32 next_fn;
+      u32 error0 = SRLB_SA_HANDOFF_ERROR_NONE;
 
       pi0 = from[0];
       from++;
       n_left_from--;
 
       p0 = vlib_get_buffer (vm, pi0);
+      ip60 = (ip6_header_t *)vlib_buffer_get_current(p0);
+
+      /* Get function and worker from dst address */
+      next_fn = ip60->dst_address.as_u8[10] >> 4;
+      error0 = (next_fn > SRLB_SA_FN_ACK_STICKINESS)?
+          SRLB_SA_HANDOFF_ERROR_INVALID_FUNCTION:error0;
 
       /* Get worker and function from adjacency */
-      if (fn == SRLB_SA_FN_ACK_STICKINESS)
+      if (next_fn == SRLB_SA_FN_ACK_STICKINESS)
         {
-          /* Packets are dispatched to a specific core. */
-          next_worker_index = vnet_buffer (p0)->ip.adj_index[VLIB_TX] >>
-              SRLB_SA_HANDOFF_CORE_OFFSET;
-          /* Only leave the VIP index in the adjacency */
-          vnet_buffer (p0)->ip.adj_index[VLIB_TX] &=
-              ~(SRLB_SA_HANDOFF_CORE_MASK);
+          next_worker_index = ip60->dst_address.as_u8[11];
+          error0 = (next_worker_index >= thread_max)?
+              SRLB_SA_HANDOFF_ERROR_INVALID_THREAD_INDEX:error0;
         }
       else
         {
@@ -764,35 +798,32 @@ srlb_sa_handoff_node_fn (vlib_main_t * vm,
               sam->ais[vnet_buffer(p0)->ip.adj_index[VLIB_TX]].handoff_thread;
         }
 
+      /* Drop all error packets without thread handoff */
+      next_worker_index = (error0 != SRLB_SA_HANDOFF_ERROR_NONE)?
+          thread_index:next_worker_index;
+
       if (next_worker_index != thread_index)
         {
+          /* Never go here when an error was detected */
+
           handoff_counter++;
 
           /* do handoff */
-          if (next_worker_index != current_worker_index)
+          if (next_worker_index != current_worker_index ||
+              next_fn != current_fn)
             {
-              u32 queue_index;
-
 allocate_hf:
-              if (fn == SRLB_SA_FN_CONNECT_IF_AVAILABLE)
-                queue_index = sam->fq_ca_index;
-              else if (fn == SRLB_SA_FN_ACK_STICKINESS)
-                queue_index = sam->fq_as_index;
-              else
-                queue_index = sam->fq_rs_index;
-
-              hf = vlib_get_worker_handoff_queue_elt (queue_index,
+              hf = vlib_get_worker_handoff_queue_elt (sam->fq_indexes[next_fn],
                                                       next_worker_index,
-                                                      sam->per_core[thread_index].handoff_per_fn[fn].per_worker);
-
+                                                      sam->per_core[thread_index].handoff_per_fn[next_fn].per_worker);
               current_worker_index = next_worker_index;
+              current_fn = next_fn;
             }
 
           if (PREDICT_FALSE(hf->n_vectors == VLIB_FRAME_SIZE))
             {
               vlib_put_frame_queue_elt (hf);
-              current_worker_index = ~0;
-              sam->per_core[thread_index].handoff_per_fn[fn].per_worker[current_worker_index] = 0;
+              sam->per_core[thread_index].handoff_per_fn[current_fn].per_worker[current_worker_index] = 0;
               goto allocate_hf;
             }
 
@@ -807,8 +838,14 @@ allocate_hf:
           n_left_to_next--;
 
           /* Validate correct node */
+          if (PREDICT_FALSE(error0 != SRLB_SA_HANDOFF_ERROR_NONE))
+            {
+              p0->error = node->errors[error0];
+              next_fn = SRLB_SA_HANDOFF_NEXT_DROP;
+            }
+
           vlib_validate_buffer_enqueue_x1(vm, node, next_index, to_next,
-                                          n_left_to_next, pi0, 0);
+                                          n_left_to_next, pi0, next_fn);
 
           if (n_left_to_next == 0)
             {
@@ -824,7 +861,7 @@ allocate_hf:
               vlib_add_trace (vm, node, p0, sizeof (*t));
           t->next_worker_index = next_worker_index;
           t->from_worker_index = thread_index;
-          t->fn = fn;
+          t->fn = next_fn;
         }
     }
 
@@ -832,16 +869,17 @@ allocate_hf:
 
   /* Ship frames to the worker nodes */
   int i;
-  vec_foreach_index(i, sam->per_core[thread_index].handoff_per_fn[fn].per_worker)
-  {
-    hf = sam->per_core[thread_index].handoff_per_fn[fn].per_worker[i];
-    sam->per_core[thread_index].handoff_per_fn[fn].per_worker[i] = 0;
-    if (hf)
-      vlib_put_frame_queue_elt (hf);
-  }
+  for (current_fn = 0; current_fn < 3; current_fn++)
+    vec_foreach_index(i, sam->per_core[thread_index].handoff_per_fn[current_fn].per_worker)
+    {
+      hf = sam->per_core[thread_index].handoff_per_fn[current_fn].per_worker[i];
+      sam->per_core[thread_index].handoff_per_fn[current_fn].per_worker[i] = 0;
+      if (hf)
+        vlib_put_frame_queue_elt (hf);
+    }
 
-    vlib_increment_simple_counter(&sam->counters, vm->thread_index,
-                                  SRLB_SA_CTR_HANDOFF, handoff_counter);
+  vlib_increment_simple_counter(&sam->counters, vm->thread_index,
+                                SRLB_SA_CTR_HANDOFF, handoff_counter);
 
   return frame->n_vectors;
 }
@@ -861,70 +899,22 @@ format_srlb_sa_handoff_trace (u8 * s, va_list * args)
   return s;
 }
 
-static uword
-srlb_sa_handoff_ca_node_fn (vlib_main_t * vm,
-                            vlib_node_runtime_t * node,
-                            vlib_frame_t * frame)
-{
-  return srlb_sa_handoff_node_fn(vm, node, frame,
-                                 SRLB_SA_FN_CONNECT_IF_AVAILABLE);
-}
-
-VLIB_REGISTER_NODE (srlb_sa_handoff_ca_node) =
-    {
-        .function = srlb_sa_handoff_ca_node_fn,
-        .name = "srlb-sa-handoff-ca",
-        .vector_size = sizeof (u32),
-        .format_trace = format_srlb_sa_handoff_trace,
-        .n_errors = 0,
-        .error_strings = NULL,
-        .n_next_nodes = 1,
-        .next_nodes = { [0] = "srlb-sa-ca" },
-    };
-
-static uword
-srlb_sa_handoff_as_node_fn (vlib_main_t * vm,
-                            vlib_node_runtime_t * node,
-                            vlib_frame_t * frame)
-{
-  return srlb_sa_handoff_node_fn(vm, node, frame,
-                                 SRLB_SA_FN_ACK_STICKINESS);
-}
-
-VLIB_REGISTER_NODE (srlb_sa_handoff_as_node) =
-    {
-        .function = srlb_sa_handoff_as_node_fn,
-        .name = "srlb-sa-handoff-as",
-        .vector_size = sizeof (u32),
-        .format_trace = format_srlb_sa_handoff_trace,
-        .n_errors = 0,
-        .error_strings = NULL,
-        .n_next_nodes = 1,
-        .next_nodes = { [0] = "srlb-sa-as" },
-    };
-
-static uword
-srlb_sa_handoff_rs_node_fn (vlib_main_t * vm,
-                            vlib_node_runtime_t * node,
-                            vlib_frame_t * frame)
-{
-  return srlb_sa_handoff_node_fn(vm, node, frame,
-                                 SRLB_SA_FN_RECOVER_STICKINESS);
-}
-
 VLIB_REGISTER_NODE (srlb_sa_handoff_rs_node) =
     {
-        .function = srlb_sa_handoff_rs_node_fn,
-        .name = "srlb-sa-handoff-rs",
+        .function = srlb_sa_handoff_node_fn,
+        .name = "srlb-sa-handoff",
         .vector_size = sizeof (u32),
         .format_trace = format_srlb_sa_handoff_trace,
         .n_errors = 0,
-        .error_strings = NULL,
-        .n_next_nodes = 1,
-        .next_nodes = { [0] = "srlb-sa-rs" },
+        .error_strings = srlb_sa_handoff_error_strings,
+        .n_next_nodes = SRLB_SA_HANDOFF_NEXT_N,
+        .next_nodes = {
+            [SRLB_SA_HANDOFF_NEXT_CA] = "srlb-sa-ca",
+            [SRLB_SA_HANDOFF_NEXT_AS] = "srlb-sa-as",
+            [SRLB_SA_HANDOFF_NEXT_RS] = "srlb-sa-rs",
+            [SRLB_SA_HANDOFF_NEXT_DROP] = "error-drop"
+        },
     };
-
-
 
 clib_error_t *
 srlb_sa_init_node (vlib_main_t * vm)

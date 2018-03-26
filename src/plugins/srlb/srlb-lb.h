@@ -101,14 +101,6 @@ typedef enum {
 
 #define SRLB_LB_DEFAULT_CONSISTENT_HASH_SIZE 256
 
-/* FIB adj_index provides, vip index, core index and function for
- * returning packets. The vip index is on low order bits,
- * while the core index is put on high order bits.
- */
-#define SRLB_LB_HANDOFF_CORE_OFFSET 26 /* up to 64 cores */
-#define SRLB_LB_HANDOFF_CORE_MASK 0xfc000000
-#define SRLB_LB_HANDOFF_DS_MASK 0x02000000
-
 typedef CLIB_PACKED(struct {
   u16 opaque;
   u8 function;

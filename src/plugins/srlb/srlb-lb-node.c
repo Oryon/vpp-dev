@@ -869,6 +869,24 @@ VLIB_REGISTER_NODE (srlb_ds_node) =
 
 /** SRLB Handoff node */
 
+#define foreach_srlb_lb_handoff_error \
+                _(NONE, "no error") \
+                _(INVALID_THREAD_INDEX, "invalid thread index") \
+                _(INVALID_FUNCTION, "invalid function")
+
+typedef enum {
+#define _(sym,str) SRLB_LB_HANDOFF_ERROR_##sym,
+  foreach_srlb_lb_handoff_error
+#undef _
+  SRLB_LB_HANDOFF_N_ERROR,
+} srlb_lb_handoff_error_t;
+
+static char *srlb_lb_handoff_error_strings[] = {
+#define _(sym,string) string,
+    foreach_srlb_lb_handoff_error
+#undef _
+};
+
 typedef struct {
   u32 from_worker_index;
   u32 next_worker_index;
@@ -895,6 +913,7 @@ srlb_lb_handoff_node_fn (vlib_main_t * vm,
 {
   srlb_lb_main_t *srlbm = &srlb_lb_main;
   u32 thread_index = vlib_get_thread_index ();
+  u32 thread_max = vlib_get_thread_main()->n_vlib_mains;
 
   /* Where to get packets from */
   u32 *from = vlib_frame_vector_args (frame);
@@ -917,24 +936,33 @@ srlb_lb_handoff_node_fn (vlib_main_t * vm,
     {
       u32 pi0;
       vlib_buffer_t *p0;
-      u8 next_ds = 0;
+      u8 next_ds;
       u32 next_worker_index;
+      ip6_header_t *ip60;
+      u32 error0 = SRLB_LB_HANDOFF_ERROR_NONE;
 
       pi0 = from[0];
       from++;
       n_left_from--;
 
       p0 = vlib_get_buffer (vm, pi0);
+      ip60 = vlib_buffer_get_current(p0);
 
       /* Get worker and function from adjacency */
-      next_worker_index = vnet_buffer (p0)->ip.adj_index[VLIB_TX] >>
-          SRLB_LB_HANDOFF_CORE_OFFSET;
-      next_ds = (vnet_buffer (p0)->ip.adj_index[VLIB_TX] &
-          SRLB_LB_HANDOFF_DS_MASK)?1:next_ds;
+      next_ds = ip60->dst_address.as_u8[10] >> 4;
+      if (PREDICT_TRUE(next_ds == SRLB_LB_FN_CREATE_STICKINESS))
+        next_ds = SRLB_LB_HANDOFF_NEXT_CS;
+      else if (PREDICT_TRUE(next_ds == SRLB_LB_FN_DELETE_STICKINESS))
+        next_ds = SRLB_LB_HANDOFF_NEXT_DS;
+      else
+        error0 = SRLB_LB_HANDOFF_ERROR_INVALID_FUNCTION;
 
-      /* Only leave the VIP index in the adjacency */
-      vnet_buffer (p0)->ip.adj_index[VLIB_TX] &=
-          ~(SRLB_LB_HANDOFF_CORE_MASK | SRLB_LB_HANDOFF_DS_MASK);
+      next_worker_index = ip60->dst_address.as_u8[11];
+      if (PREDICT_FALSE(next_worker_index >= thread_max))
+        {
+          error0 = SRLB_LB_HANDOFF_ERROR_INVALID_THREAD_INDEX;
+          next_worker_index = thread_index;
+        }
 
       if (next_worker_index != thread_index)
         {
@@ -945,7 +973,7 @@ srlb_lb_handoff_node_fn (vlib_main_t * vm,
               next_ds != current_ds)
             {
 allocate_hf:
-              hf = vlib_get_worker_handoff_queue_elt (next_ds?srlbm->fq_ds_index:srlbm->fq_cs_index,
+              hf = vlib_get_worker_handoff_queue_elt ((next_ds == SRLB_LB_HANDOFF_NEXT_DS)?srlbm->fq_ds_index:srlbm->fq_cs_index,
                                                       next_worker_index,
                                                       srlbm->per_core[thread_index].handoff_per_fn[next_ds].per_worker);
 
@@ -956,7 +984,6 @@ allocate_hf:
           if (PREDICT_FALSE(hf->n_vectors == VLIB_FRAME_SIZE))
             {
               vlib_put_frame_queue_elt (hf);
-              current_worker_index = ~0;
               srlbm->per_core[thread_index].handoff_per_fn[current_ds].per_worker[current_worker_index] = 0;
               goto allocate_hf;
             }
@@ -972,9 +999,14 @@ allocate_hf:
           n_left_to_next--;
 
           /* Validate correct node */
+          if (PREDICT_FALSE(error0 != SRLB_LB_HANDOFF_ERROR_NONE))
+            {
+              next_ds = SRLB_LB_HANDOFF_NEXT_DROP;
+              p0->error = node->errors[error0];
+            }
+
           vlib_validate_buffer_enqueue_x1(vm, node, next_index, to_next,
-                                          n_left_to_next, pi0,
-                                          next_ds?SRLB_LB_HANDOFF_NEXT_DS:SRLB_LB_HANDOFF_NEXT_CS);
+                                          n_left_to_next, pi0, next_ds);
 
           if (n_left_to_next == 0)
             {
@@ -1020,8 +1052,8 @@ VLIB_REGISTER_NODE (srlb_lb_handoff_node) =
         .vector_size = sizeof (u32),
         .format_trace = format_srlb_lb_handoff_trace,
 
-        .n_errors = SRLB_LB_N_ERROR,
-        .error_strings = srlb_lb_error_strings,
+        .n_errors = SRLB_LB_HANDOFF_N_ERROR,
+        .error_strings = srlb_lb_handoff_error_strings,
 
         .n_next_nodes = SRLB_LB_HANDOFF_N_NEXT,
         .next_nodes =
