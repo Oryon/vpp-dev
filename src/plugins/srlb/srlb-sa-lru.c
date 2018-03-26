@@ -24,9 +24,12 @@ typedef struct {
 typedef struct {
   srlb_sa_lru_policy_t *policies;
   u32 policy_index;
+  u8 enable_elog;
 } srlb_sa_lru_main_t;
 
 static srlb_sa_lru_main_t srlb_sa_lru_main;
+
+
 
 static int srlb_sa_ap_lru_accept_fn(u32 ai_index,
                                     u32 remaining_choices,
@@ -54,6 +57,25 @@ static int srlb_sa_ap_lru_accept_fn(u32 ai_index,
                    format_srlb_lru_category, previous_category,
                    hash_index,
                    accept?"accept":"reject");
+
+  if (SRLB_SA_LOG_ENABLE_DATA && lrum->enable_elog)
+    {
+      ELOG_TYPE_DECLARE (e) = {
+              .format = "srlb-lru-req cat %d rem %d vip %04x:%04x:%04x:%04x dec %s",
+              .format_args = "i1i1i2i2i2i2t1",
+              .n_enum_strings = 2,
+              .enum_strings = { "accept", "reject", },
+      };
+      struct { u8 category, remaining; u16 shorts[4]; u8 type; } * ed;
+      ed = ELOG_DATA (&vlib_global_main.elog_main, e);
+      ed->category = previous_category;
+      ed->remaining = remaining_choices;
+      ed->shorts[3] = clib_net_to_host_u16((vip_low << 00) >> 48);
+      ed->shorts[2] = clib_net_to_host_u16((vip_low << 16) >> 48);
+      ed->shorts[1] = clib_net_to_host_u16((vip_low << 32) >> 48);
+      ed->shorts[0] = clib_net_to_host_u16((vip_low << 48) >> 48);
+      ed->type = accept?0:1;
+    }
 
   return !accept;
 }
@@ -125,6 +147,7 @@ clib_error_t * srlb_sa_lru_init (vlib_main_t * vm)
 {
   srlb_sa_lru_main_t *lrum = &srlb_sa_lru_main;
   lrum->policies = 0;
+  lrum->enable_elog = 0;
 
   srlb_sa_accept_policy_t policy;
   policy.accept = srlb_sa_ap_lru_accept_fn;
@@ -286,3 +309,45 @@ VLIB_CLI_COMMAND (show_srlb_sa_lru_command, static) =
             "[index <n>|all] [verbose|v<n>] ",
             .function = show_srlb_sa_lru_command_fn,
     };
+
+
+clib_error_t *
+elog_srlb_sa_lru_enable_command (vlib_main_t * vm,
+                          unformat_input_t * input,
+                          vlib_cli_command_t * cmd)
+{
+  srlb_sa_lru_main_t *lrum = &srlb_sa_lru_main;
+  if (!SRLB_SA_LOG_ENABLE_DATA)
+    return clib_error_return (0, "SRLB data log is only compiled in debug mode");
+  lrum->enable_elog = 1;
+  return NULL;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (elog_srlb_sa_lru_enable, static) = {
+    .path = "debug srlb sa lru-policy elog enable",
+    .short_help = "debug srlb sa lru-policy elog enable",
+    .function = elog_srlb_sa_lru_enable_command,
+};
+/* *INDENT-ON* */
+
+
+clib_error_t *
+elog_srlb_sa_lru_disable_command (vlib_main_t * vm,
+                          unformat_input_t * input,
+                          vlib_cli_command_t * cmd)
+{
+  srlb_sa_lru_main_t *lrum = &srlb_sa_lru_main;
+  if (!SRLB_SA_LOG_ENABLE_DATA)
+    return clib_error_return (0, "SRLB data log is only compiled in debug mode");
+  lrum->enable_elog = 0;
+  return NULL;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (elog_srlb_sa_lru_disable, static) = {
+    .path = "debug srlb sa lru-policy elog disable",
+    .short_help = "debug srlb sa lru-policy elog disable",
+    .function = elog_srlb_sa_lru_disable_command,
+};
+/* *INDENT-ON* */
