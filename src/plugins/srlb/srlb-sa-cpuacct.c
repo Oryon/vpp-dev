@@ -91,10 +91,12 @@ srlb_sa_cpuacct_set_curr_usage(srlb_sa_cpuacct_policy_t * p)
   }
   char buf[1024];
   lseek(p->fd, 0, SEEK_SET);
-  read(p->fd, buf, sizeof(buf));
-  p->prev_cpuacct = p->curr_cpuacct;
-  p->curr_cpuacct = strtoull(buf, 0, 10);
-  p->curr_cpu_usage_pcent = 100 * (p->curr_cpuacct - p->prev_cpuacct) / (NS_IN_SEC * CPUACCT_PROBE_INTERVAL);
+  if (read(p->fd, buf, sizeof(buf)) > 0)
+    {
+      p->prev_cpuacct = p->curr_cpuacct;
+      p->curr_cpuacct = strtoull(buf, 0, 10);
+      p->curr_cpu_usage_pcent = 100 * (p->curr_cpuacct - p->prev_cpuacct) / (NS_IN_SEC * CPUACCT_PROBE_INTERVAL);
+    }
 }
 
 static uword
