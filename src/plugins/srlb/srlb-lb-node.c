@@ -703,6 +703,13 @@ srlb_cs_ds_node_fn (vlib_main_t * vm,
 	      val0->index = (u32) value.value;
 	    }
 
+	  {
+	    /* set tx fib index on client side */
+	    srlb_lb_vip_t *vip0 =
+	        &srlbm->vips[vnet_buffer (p0)->ip.adj_index[VLIB_TX]];
+	    vnet_buffer (p0)->sw_if_index[VLIB_TX] = vip0->client_tx_fib_index;
+	  }
+
 	  /* Process state machine. */
 	  if (delete_sickyness)
 	    {

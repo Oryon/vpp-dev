@@ -310,14 +310,14 @@ typedef struct {
   /** IPv6 prefix length of this VIP */
   u8 prefix_length;
 
-  /** Vector of server pools. One per choice in the SR list. */
-  /*srlb_lb_server_pool_t pools[SRLB_LB_SERVER_POOL_MAX]; */
-
   /** Index of all servers associated with this VIP */
   u32 *server_indices;
 
   /** hash type */
   srlb_lb_vip_hash_t hash;
+
+  /** fib index on client side to send packets */
+  u32 client_tx_fib_index;
 
   /** /80 prefix used for SR functions. */
   ip6_address_t sr_prefix;
@@ -326,11 +326,24 @@ typedef struct {
    * This is updated by main thread when there is a cht update. */
   volatile u32 cht_index;
 
+  /*
+   * Variables not used by the data-plane from here
+   */
+
   /** Currently configured consistent hash table size. */
   u32 cht_size;
 
   /** Pool of cht used by this VIP */
   u32 *cht_indices;
+
+  /** fib index on client side to receive packets */
+  u32 client_rx_fib_index;
+
+  /** fib index on server side to receive packets */
+  u32 sr_rx_fib_index;
+
+  /** fib index on server side to send packets */
+  u32 sr_tx_fib_index;
 
 } srlb_lb_vip_t;
 
@@ -441,6 +454,10 @@ extern srlb_lb_main_t srlb_lb_main;
 #define SRLB_LB_API_FLAGS_CONSISTENT_HASHTABLE_SIZE_SET (1 << 1)
 #define SRLB_LB_API_FLAGS_HASH_SET                      (1 << 2)
 #define SRLB_LB_API_FLAGS_SR_PREFIX_SET                 (1 << 3)
+#define SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET             (1 << 4)
+#define SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET             (1 << 5)
+#define SRLB_LB_API_FLAGS_SR_TX_FIB_SET                 (1 << 6)
+#define SRLB_LB_API_FLAGS_SR_RX_FIB_SET                 (1 << 7)
 
 typedef struct {
   u32 flow_active_timeout;
@@ -458,6 +475,10 @@ typedef struct {
   ip6_address_t sr_prefix;
   u32 consistent_hashtable_size;
   srlb_lb_vip_hash_t hash;
+  u32 client_tx_fib_index;
+  u32 client_rx_fib_index;
+  u32 sr_tx_fib_index;
+  u32 sr_rx_fib_index;
   u32 flags;
 } srlb_lb_vip_conf_args_t;
 
@@ -467,19 +488,18 @@ int srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args);
 typedef struct {
   ip6_address_t vip_address;
   u8 vip_prefix_length;
+  u32 client_rx_fib_index;
   u32 pool_bitmask;
   u32 server_count;
-  u8 is_del;
   ip6_address_t *server_addresses;
+  u32 flags;
 } srlb_lb_server_add_del_args_t;
 
 /** Add del some servers */
 int srlb_lb_server_add_del(srlb_lb_server_add_del_args_t *args);
 
-/** Get existing VIP object by its address or its SR prefix.
- * The returned value may match only one of the provided value. */
+/** Get existing VIP object. */
 srlb_lb_vip_t *
-srlb_get_vip_by_prefix (ip6_address_t * vip_address,
-                         u8 vip_prefix_length);
+srlb_get_vip(ip6_address_t * vip_address, u8 plen, u32 client_rx_fib_index);
 
 #endif /* SRLB_PLUGIN_SRLB_H */

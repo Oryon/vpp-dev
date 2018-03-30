@@ -51,6 +51,17 @@ uword unformat_srlb_lb_flow_state (unformat_input_t * input, va_list * args)
   return 0;
 }
 
+static
+u8 *format_fib_index (u8 * s, va_list * args)
+{
+  u32 fib_index = va_arg (*args, u32);
+  fib_table_t *fib_table = fib_table_get(fib_index, FIB_PROTOCOL_IP6);
+  if (fib_table == NULL)
+    return format(s, "invalid-fib-index");
+
+  return format(s, "%d", fib_table->ft_table_id);
+}
+
 u8 *format_srlb_lb_flow_state (u8 * s, va_list * args)
 {
   srlb_lb_flow_state state = va_arg (*args, srlb_lb_flow_state);
@@ -120,17 +131,20 @@ u8 *format_srlb_lb_vip_with_verbosity (u8 * s, va_list * args)
   srlb_lb_vip_t *vip = va_arg (*args, srlb_lb_vip_t *);
   int verbosity = va_arg (*args, int);
   uword i = format_get_indent (s);
-  s = format(s, "%U/%u", format_ip6_address, &vip->prefix,
-             vip->prefix_length);
+  s = format(s, "%U/%u rx-client-table-id: %U", format_ip6_address, &vip->prefix,
+             vip->prefix_length, format_fib_index, vip->client_rx_fib_index);
 
   if (verbosity == 0)
     return s;
 
   s = FORMAT_WNL(s, i, "sr-prefix: %U", format_ip6_address, &vip->sr_prefix);
+  s = FORMAT_WNL(s, i, "client-rx-fib-index: %d", vip->client_rx_fib_index);
+  s = FORMAT_WNL(s, i, "client-tx-fib-index: %d", vip->client_tx_fib_index);
+  s = FORMAT_WNL(s, i, "sr-rx-fib-index: %d", vip->sr_rx_fib_index);
+  s = FORMAT_WNL(s, i, "sr-tx-fib-index: %d", vip->sr_tx_fib_index);
   s = FORMAT_WNL(s, i, "hash: %U", format_srlb_lb_vip_hash, vip->hash);
   s = FORMAT_WNL(s, i, "buckets: %d", vip->cht_size);
   s = FORMAT_WNL(s, i, "servers:");
-
 
   u32 *sip;
   pool_foreach(sip, vip->server_indices, {
@@ -493,14 +507,16 @@ srlb_vip_add_adjacencies(srlb_lb_vip_t * vip)
       .fp_proto = FIB_PROTOCOL_IP6
   };
 
+  /* Add client rx FIB entry */
   dpo_set(&dpo, srlbm->dpo_client_type, DPO_PROTO_IP6, vip - srlbm->vips);
-  fib_table_entry_special_dpo_add(0,
+  fib_table_entry_special_dpo_add(vip->client_rx_fib_index,
 				  &fib_prefix,
 				  FIB_SOURCE_PLUGIN_HI,
 				  FIB_ENTRY_FLAG_EXCLUSIVE,
 				  &dpo);
   dpo_reset(&dpo);
 
+  /* Add SR rx FIB entry */
   fib_prefix_t pfx = {
       .fp_addr.ip6 = vip->sr_prefix,
       .fp_len = 80,
@@ -508,7 +524,7 @@ srlb_vip_add_adjacencies(srlb_lb_vip_t * vip)
   };
 
   dpo_set(&dpo, srlbm->dpo_handoff_type, DPO_PROTO_IP6, vip - srlbm->vips);
-  fib_table_entry_special_dpo_add(0, &pfx,
+  fib_table_entry_special_dpo_add(vip->sr_rx_fib_index, &pfx,
                                   FIB_SOURCE_PLUGIN_HI,
                                   FIB_ENTRY_FLAG_EXCLUSIVE,
                                   &dpo);
@@ -518,26 +534,23 @@ srlb_vip_add_adjacencies(srlb_lb_vip_t * vip)
 static void
 srlb_vip_del_adjacencies(srlb_lb_vip_t * vip)
 {
+  /* Remove client rx FIB entry */
   fib_prefix_t pfx0 = {
       .fp_addr.ip6 = vip->prefix,
       .fp_len = vip->prefix_length,
       .fp_proto = FIB_PROTOCOL_IP6
   };
+  fib_table_entry_special_remove(vip->client_rx_fib_index,
+                                 &pfx0, FIB_SOURCE_PLUGIN_HI);
 
-  /* Remove entry from the FIB */
-  fib_table_entry_special_remove(0, &pfx0, FIB_SOURCE_PLUGIN_HI);
-
+  /* Remove SR rx FIB entry*/
   fib_prefix_t pfx1 = {
       .fp_addr.ip6 = vip->sr_prefix,
-      .fp_len = 84,
+      .fp_len = 80,
       .fp_proto = FIB_PROTOCOL_IP6,
   };
-
-  srlb_sr_set_fn(&pfx1.fp_addr.ip6, SRLB_LB_FN_CREATE_STICKINESS);
-  fib_table_entry_special_remove(0, &pfx0, FIB_SOURCE_PLUGIN_HI);
-
-  srlb_sr_set_fn(&pfx1.fp_addr.ip6, SRLB_LB_FN_DELETE_STICKINESS);
-  fib_table_entry_special_remove(0, &pfx0, FIB_SOURCE_PLUGIN_HI);
+  fib_table_entry_special_remove(vip->sr_rx_fib_index,
+                                 &pfx1, FIB_SOURCE_PLUGIN_HI);
 }
 
 /** Returns server index from address and vip object. */
@@ -652,7 +665,7 @@ srlb_server_alloc(srlb_lb_vip_t *vip, ip6_address_t *a)
   nh.fp_proto = FIB_PROTOCOL_IP6;
 
   s->next_hop_fib_entry_index =
-      fib_table_entry_special_add(0,
+      fib_table_entry_special_add(vip->sr_tx_fib_index,
                                   &nh,
                                   FIB_SOURCE_RR,
                                   FIB_ENTRY_FLAG_NONE);
@@ -809,12 +822,13 @@ srlb_server_add(srlb_lb_vip_t *vip, u32 pool_bitmask,
 }
 
 srlb_lb_vip_t *
-srlb_get_vip_by_prefix(ip6_address_t * vip_address, u8 plen)
+srlb_get_vip(ip6_address_t * vip_address, u8 plen, u32 client_rx_fib_index)
 {
   srlb_lb_main_t * srlbm = &srlb_lb_main;
   srlb_lb_vip_t *vip;
   pool_foreach(vip, srlbm->vips, ({
     if ((vip->prefix_length == plen &&
+        vip->client_rx_fib_index == client_rx_fib_index &&
         ip6_address_is_equal(vip_address, &vip->prefix)))
       return vip;
   }));
@@ -823,12 +837,19 @@ srlb_get_vip_by_prefix(ip6_address_t * vip_address, u8 plen)
 
 int srlb_lb_server_add_del(srlb_lb_server_add_del_args_t *args)
 {
-  srlb_lb_vip_t *vip = srlb_get_vip_by_prefix (&args->vip_address,
-                                               args->vip_prefix_length);
+  srlb_lb_vip_t *vip;
+
+  if (!(args->flags & SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET))
+    args->client_rx_fib_index = 0;
+
+  vip = srlb_get_vip (&args->vip_address,
+                     args->vip_prefix_length,
+                     args->client_rx_fib_index);
+
   if (vip == NULL)
     return VNET_API_ERROR_NO_SUCH_ENTRY;
 
-  if (args->is_del)
+  if (args->flags & SRLB_LB_API_FLAGS_IS_DEL)
     return srlb_server_del(vip, args->pool_bitmask,
                            args->server_addresses, args->server_count);
   else
@@ -840,8 +861,14 @@ int
 srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
 {
   srlb_lb_main_t * srlbm = &srlb_lb_main;
-  srlb_lb_vip_t *vip = srlb_get_vip_by_prefix (&args->vip_address,
-                                               args->vip_prefix_length);
+  srlb_lb_vip_t *vip;
+
+  if (!(args->flags & SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET))
+    args->client_rx_fib_index = 0;
+
+  vip = srlb_get_vip (&args->vip_address,
+                      args->vip_prefix_length,
+                      args->client_rx_fib_index);
 
   if ((args->flags & SRLB_LB_API_FLAGS_IS_DEL) && vip == NULL)
     return VNET_API_ERROR_NO_SUCH_ENTRY;
@@ -886,7 +913,6 @@ srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
       args->hash = SRLB_LB_VIP_HASH_5_TUPLE;
 
   /* Check values */
-
   if ((!is_pow2(args->consistent_hashtable_size) ||
           args->consistent_hashtable_size == 0))
     return VNET_API_ERROR_INVALID_MEMORY_SIZE;
@@ -899,6 +925,15 @@ srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
       if (!(args->flags & SRLB_LB_API_FLAGS_SR_PREFIX_SET))
         return VNET_API_ERROR_INVALID_ARGUMENT;
 
+      if (!(args->flags & SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET))
+        args->client_tx_fib_index = 0;
+
+      if (!(args->flags & SRLB_LB_API_FLAGS_SR_RX_FIB_SET))
+        args->sr_rx_fib_index = 0;
+
+      if (!(args->flags & SRLB_LB_API_FLAGS_SR_TX_FIB_SET))
+        args->sr_tx_fib_index = 0;
+
       SRLB_LB_LOG_DEBUG("Adding VIP %U",
       			format_ip6_address, &args->vip_address);
 
@@ -910,15 +945,27 @@ srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
       vip->cht_index = 0;
       vip->server_indices = 0;
       vip->cht_indices = 0;
+      vip->client_rx_fib_index = args->client_rx_fib_index;
+      vip->client_tx_fib_index = args->client_tx_fib_index;
+      vip->sr_rx_fib_index = args->sr_rx_fib_index;
+      vip->sr_tx_fib_index = args->sr_tx_fib_index;
       args->flags |= SRLB_LB_API_FLAGS_CONSISTENT_HASHTABLE_SIZE_SET |
           SRLB_LB_API_FLAGS_HASH_SET;
     }
-  else if ((args->flags & SRLB_LB_API_FLAGS_SR_PREFIX_SET) &&
-      (!ip6_address_is_equal(&vip->sr_prefix, &args->sr_prefix)))
+  else /* VIP exists */
     {
       /** Found a VIP with mismatching SR prefix (they must be the same
        * as they are immutable) */
-      return VNET_API_ERROR_INVALID_SRC_ADDRESS;
+      if ((args->flags & SRLB_LB_API_FLAGS_SR_PREFIX_SET) &&
+          (!ip6_address_is_equal(&vip->sr_prefix, &args->sr_prefix)))
+        return VNET_API_ERROR_INVALID_SRC_ADDRESS;
+
+      /* fib indexes are immutable */
+      if ((args->flags & (SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET |
+          SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET |
+          SRLB_LB_API_FLAGS_SR_RX_FIB_SET |
+          SRLB_LB_API_FLAGS_SR_TX_FIB_SET)))
+        return VNET_API_ERROR_UNSUPPORTED;
     }
 
   if ((args->flags & SRLB_LB_API_FLAGS_CONSISTENT_HASHTABLE_SIZE_SET) &&
@@ -960,7 +1007,8 @@ const static char* const * const srlb_dpo_##n##_nodes[DPO_PROTO_NUM] = { \
 static void srlb_dpo_##n##_lock(dpo_id_t *dpo) { } \
 static void srlb_dpo_##n##_unlock(dpo_id_t *dpo) { } \
 static u8 * format_srlb_dpo_##n (u8 * s, va_list * args) { \
-  return format (s, "dpo-srlb-lb-"#n) ; \
+  u32 dpo_index = va_arg (*args, u32); \
+  return format (s, "dpo-srlb-lb-"#n" vip-index: %d", dpo_index) ; \
 }
 
 foreach_srlb_lb_dpo

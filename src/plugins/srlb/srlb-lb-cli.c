@@ -32,6 +32,7 @@ srlb_vip_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   srlb_lb_vip_conf_args_t args = {};
   clib_error_t *error = NULL;
+  u32 table_id;
   int rv;
 
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -55,6 +56,34 @@ srlb_vip_command_fn (vlib_main_t * vm,
       } else if (unformat(line_input, "hash %U",
                           unformat_srlb_lb_vip_hash, &args.hash)) {
           args.flags |= SRLB_LB_API_FLAGS_HASH_SET;
+      } else if (unformat(line_input, "client-rx-table-id %d", &table_id)) {
+          if ((args.client_rx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              goto done;
+            }
+          args.flags |= SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET;
+      } else if (unformat(line_input, "client-tx-table-id %d", &table_id)) {
+          if ((args.client_tx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              goto done;
+            }
+          args.flags |= SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET;
+      } else if (unformat(line_input, "sr-rx-table-id %d", &table_id)) {
+          if ((args.sr_rx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              goto done;
+            }
+          args.flags |= SRLB_LB_API_FLAGS_SR_RX_FIB_SET;
+      } else if (unformat(line_input, "sr-tx-table-id %d", &table_id)) {
+          if ((args.sr_tx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              goto done;
+            }
+          args.flags |= SRLB_LB_API_FLAGS_SR_TX_FIB_SET;
       } else if (unformat(line_input, "del")) {
           args.flags |= SRLB_LB_API_FLAGS_IS_DEL;
       } else {
@@ -75,7 +104,10 @@ done:
 VLIB_CLI_COMMAND (srlb_vip_command, static) =
     {
 	.path = "srlb lb vip",
-	.short_help = "srlb lb vip <vip-prefix> [sr <sr-prefix>] [consistent-hash-size <n>] [hash <vip|5-tuple>] [del]",
+	.short_help = "srlb lb vip <vip-prefix> [sr <sr-prefix>] "
+	    "[client-rx-table-id <n>] [client-tx-table-id <n>] "
+	    "[sr-rx-table-id <n>] [sr-tx-table-id <n>] "
+	    "[consistent-hash-size <n>] [hash <vip|5-tuple>] [del]",
 	.function = srlb_vip_command_fn,
 	.is_mp_safe = 1,
     };
@@ -90,6 +122,7 @@ srlb_server_command_fn (vlib_main_t * vm,
 
   int rv;
   clib_error_t *error = 0;
+  u32 table_id;
 
   if (!unformat_user (input, unformat_line_input, line_input))
     return 0;
@@ -103,9 +136,9 @@ srlb_server_command_fn (vlib_main_t * vm,
   }
 
   if (unformat(line_input, "add"))
-    args.is_del = 0;
+    ;
   else if (unformat(line_input, "del"))
-    args.is_del = 1;
+    args.flags |= SRLB_LB_API_FLAGS_IS_DEL;
   else
     {
       error = clib_error_return (0, "Expecting 'add' or 'del'");
@@ -116,6 +149,13 @@ srlb_server_command_fn (vlib_main_t * vm,
     {
       if (unformat(line_input, "%U", unformat_ip6_address, &server_address)) {
 	  vec_add1(args.server_addresses, server_address);
+      } else if (unformat(line_input, "client-rx-table-id %d", &table_id)) {
+          if ((args.client_rx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              goto done;
+            }
+        args.flags |= SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET;
       } else {
 	  error = clib_error_return (0, "parse error: '%U'",
 				     format_unformat_error, line_input);
@@ -140,7 +180,8 @@ srlb_server_command_fn (vlib_main_t * vm,
 VLIB_CLI_COMMAND (srlb_server_command, static) =
     {
 	.path = "srlb lb server",
-	.short_help = "srlb lb server <vip-prefix> <pool-list> (add|del) <s1> [<s2> [<s3> ...]]",
+	.short_help = "srlb lb server <vip-prefix> <pool-list> (add|del) "
+	    "[client-rx-table-id <n>] <s1> [<s2> [<s3> ...]]",
 	.function = srlb_server_command_fn,
 	.is_mp_safe = 1,
     };
@@ -259,6 +300,8 @@ srlb_show_lb_vip_command_fn (vlib_main_t * vm,
   u8 address_set = 0;
   int verbosity = 0;
   clib_error_t *error;
+  u32 client_rx_fib_index = 0;
+  u32 table_id;
 
   if (!unformat_user (input, unformat_line_input, line_input))
     goto no_parse;
@@ -269,6 +312,14 @@ srlb_show_lb_vip_command_fn (vlib_main_t * vm,
 	  address_set = 1;
       } else if (unformat(line_input, "%U", unformat_verbosity, &verbosity)) {
 	  ;
+      } else if (unformat(line_input, "client-rx-table-id %d", &table_id)) {
+          if ((client_rx_fib_index = fib_table_find(FIB_PROTOCOL_IP6, table_id)) == ~0)
+            {
+              error = clib_error_return (0, "ipv6 table %d does not exist", table_id);
+              unformat_free (line_input);
+              return error;
+            }
+          ;
       } else {
 	  error = clib_error_return (0, "parse error: '%U'",
 				    format_unformat_error, line_input);
@@ -282,7 +333,7 @@ srlb_show_lb_vip_command_fn (vlib_main_t * vm,
 no_parse:
   if (address_set)
     {
-      srlb_lb_vip_t *vip = srlb_get_vip_by_prefix(&vip_address, plen);
+      srlb_lb_vip_t *vip = srlb_get_vip(&vip_address, plen, client_rx_fib_index);
       if (vip == NULL)
 	return clib_error_return (0, "VIP not found");
 
@@ -305,7 +356,7 @@ no_parse:
 VLIB_CLI_COMMAND (srlb_show_lb_vip_command, static) =
     {
 	.path = "show srlb lb vip",
-	.short_help = "show srlb lb vip [<vip-prefix>] [verbose]",
+	.short_help = "show srlb lb vip [<vip-prefix>] [client-rx-table-id <n>] [verbose|v<n>]",
 	.function = srlb_show_lb_vip_command_fn,
     };
 
