@@ -21,7 +21,7 @@ This document focuses on the implementation and usability aspects of SRLB VPP Pl
 - [SRLB: The Power of Choices in Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/7980143/)
 - [6LB: Scalable and Application-Aware Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/8293698/)
 
-### Authors
+### VPP Plugin Maintainers
 - Pierre Pfister <ppfister@cisco.com>
 - Yoann Desmouceaux <ydesmouc@cisco.com>
 
@@ -113,6 +113,39 @@ srlb lb server 2001:db8:1111:1::/64 1-2 del 2001:db8:ffff:2:1::/80
 srlb lb server 2001:db8:1111:1::/64 3,5 del 2001:db8:ffff:3:1::/80
 ```
 
+### Using different FIBs (VRFs)
+
+The Load-Balancer interacts with the outside in four different ways:
+
+1. Receiving packets from clients, which destination is included in a VIP prefix.
+2. Receiving packets from *server agents*, which destination is an SRLB SR SID.
+3. Sending packets to the clients.
+4. Sending packets to the *server agents*
+
+Each of these operation require an IP Lookup (although 4. is not performed on the data-path, but rather during FIB updates). By default, the four operations are performed using the default FIB (table 0), but in some cases it is desirable to perform those operations in different FIBs. For example:
+
+- When routes to the clients and to the *server agents* are configured in different VRFs (1. and 3. are performed in a different FIB from 2. and 4.)
+- When a single VIP must behave in different ways depending on the interface the packets come from.
+
+In order to handle those situations, each of the previous four operations can be performed in different FIBs, configured on a per VIP basis, using the following `srlb lb vip` options.
+
+- `client-rx-table-id <n>`: Table used to receive packets which destination is included in the VIP prefix.
+- `client-tx-table-id <n>`: Table used to send packet to clients.
+- `sr-rx-table-id <n>`: Table used to receive packets to the VIP SRLB SR prefix.
+- `sr-tx-table-id <n>`:Table used to send packets to the *server agents* SRLB SR prefixes.
+
+In addition, it is worth noting that SRLB VIPs using different FIBs to receive packets from clients are seen as totally different VIPs, which may be configured independently (e.g. with different servers, table size, hashing algorithm, or even number of servers in the hunting path). For that purpose, the `client-rx-table-id <n>` argument also exists in the `srlb lb server` command in order to disambiguate between different VIP instances using the same prefix.
+
+For example, the following configuration is valid:
+```
+ip6 table add 1
+
+srlb lb vip 2001:1::/64 sr 2001:ffff:2::
+srlb lb vip 2001:1::/64 client-rx-table-id 1 sr 2001:ffff:1::
+
+srlb lb server 2001:1::/64 1 add 2001:ffff:b::
+srlb lb server 2001:1::/64 1-2 add client-rx-table-id 1 2001:ffff:a::
+```
 
 ### Flow-Table
 
