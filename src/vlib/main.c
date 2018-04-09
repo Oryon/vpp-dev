@@ -806,16 +806,20 @@ elog_show_buffer_internal (vlib_main_t * vm, u32 n_events_to_show)
   elog_main_t *em = &vm->elog_main;
   elog_event_t *e, *es;
   f64 dt;
+  struct timespec init_ts;
+  init_ts.tv_nsec = em->init_time.os_nsec % (u64)(1e9);
+  init_ts.tv_sec = (em->init_time.os_nsec / (u64)(1e9)) + 1490885108;
 
   /* Show events in VLIB time since log clock starts after VLIB clock. */
   dt = (em->init_time.cpu - vm->clib_time.init_cpu_time)
     * vm->clib_time.seconds_per_clock;
 
   es = elog_peek_events (em);
-  vlib_cli_output (vm, "%d of %d events in buffer, logger %s", vec_len (es),
+  vlib_cli_output (vm, "%d of %d events in buffer, logger %s, init_time %lld.%.9ld", vec_len (es),
 		   em->event_ring_size,
 		   em->n_total_events < em->n_total_events_disable_limit ?
-		   "running" : "stopped");
+		   "running" : "stopped",
+		   (long long)init_ts.tv_sec, init_ts.tv_nsec);
   vec_foreach (e, es)
   {
     vlib_cli_output (vm, "%18.9f: %U",
