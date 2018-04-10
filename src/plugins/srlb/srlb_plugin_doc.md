@@ -328,6 +328,16 @@ $ sudo ip netns exec $PID ip -6 route add default via 2001:db8:aaaa:3::2
 $ sudo rm /var/run/netns/$PID
 ```
 
+### CPU threshold policy
+
+The CPU threshold policy can be used for applications for which a simple metric such as the number of active connections is unavailable, but which are CPU intensive. It is notably useful in a container context, wherein an application or a group of applications shares a _CPU accounting_ (`cpuacct`) cgroup. With this policy, queries are accepted if and only if the CPU usage of the group is below a certain threshold.
+
+This policy is instantiated as follows:
+```srlb sa cpuacct-policy opaque <opaque> filename <cpuacct-file> threshold <thresh> [del]```
+The policy identifier (to be used in the `srlb sa application policy` command) must be specified through the `opaque` parameter. In addition, `cpuacct-file` must contain the path of a _cpuacct_ file, from which the plugin will retrieve CPU usage information. Finally, `thresh` is a threshold parameter, representing the CPU usage (in percents) above which queries are refused. Note that, in multi-cores environment, a CPU usage of 100\% represents one fully-used core, and thus it might be necessary to specify thresholds above 100\%. 
+
+The system-wide _cpuacct_ file is `/sys/fs/cgroup/cpuacct/cpuacct.usage`. When using Docker containers, the _cpuacct_ file for a given container `$CONTAINER_ID` can be found at `/sys/fs/cgroup/cpuacct/docker/$CONTAINER_ID/cpuacct.usage`.
+
 
 ### Least Recently Used (lru) policies
 
