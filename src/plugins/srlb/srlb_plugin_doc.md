@@ -276,6 +276,14 @@ The data log level is extremly verbose (typically displays event for each flow),
 
 Each Application instance is associated with a single Accept Policy instance. Such an instance is identified by an Accept Policy name (a.k.a. type) and an opaque instance number. The different implemented Accept Policies may be listed with the `show srlb sa accept-policies` command.
 
+All accept-policies are implemented as a callback function taking as argument the last 64 bits of the VIP, the policy opaque index as well as the number of remaining server on the hunting path (where 0 means that the packet will be dropped if the new connexion is rejected). 
+
+It is possible to manualy call this function and display the resulting decision by using the following command:
+
+```
+test srlb sa accept-policy callback <sr-prefix> choices-left <n> vip <0123:4567:89ab:cdef>
+```
+
 ### Test and dummy policies
 
 The following policies are implemented for test and simple deployment purposes, and may be configured using any opaque value.
@@ -354,10 +362,11 @@ It is for instance possible to assign a cost of `n` to all VIP addresses by usin
 
 When a new connection request is received, the connection is accepted if the VIP address is found in the LRU and if the total cost of all elements that are *before* in the LRU list (i.e. for which a request have been received after the last time a request for the given VIP address was received), plus the cost of the considered VIP address, is smaller than the configured threshold.
 
-A given LRU policy instance may be created or deleted using the following command:
+A given LRU policy instance may be created, modified, or deleted using the following command:
 
 ```
 srlb sa lru-policy [size <ip6-address-mask> <exp> <add>] [threshold <threshold>] [entries <n>]
+srlb sa lru-policy threshold <threshold> index <n>
 srlb sa lru-policy index <n> del
 ```
 
