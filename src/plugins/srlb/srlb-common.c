@@ -119,3 +119,31 @@ u8 *format_u32_bitmask_list (u8 * s, va_list * args)
 
   return s;
 }
+
+uword
+unformat_half_ip6_address (unformat_input_t * input, va_list * args)
+{
+  u64 *result = va_arg (*args, u64 *);
+  u32 a[4];
+
+  if (!unformat (input, "%x:%x:%x:%x", &a[0], &a[1], &a[2], &a[3]))
+    return 0;
+
+  if (a[0] > 0xFFFF || a[1] > 0xFFFF || a[2] > 0xFFFF || a[3] > 0xFFFF)
+    return 0;
+
+  *result = clib_host_to_net_u64 ((((u64) a[0]) << 48) |
+                                  (((u64) a[1]) << 32) |
+                                  (((u64) a[2]) << 16) | (((u64) a[3])));
+
+  return 1;
+}
+
+u8 *
+format_half_ip6_address (u8 * s, va_list * va)
+{
+  u64 v = clib_net_to_host_u64 (va_arg (*va, u64));
+
+  return format (s, "%04x:%04x:%04x:%04x",
+                 v >> 48, (v >> 32) & 0xffff, (v >> 16) & 0xffff, v & 0xffff);
+}

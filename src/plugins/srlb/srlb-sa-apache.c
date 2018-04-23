@@ -221,7 +221,8 @@ srlb_sa_apache_policy_accept_fn(u32 ai_index, u32 remaining_choices,
   if (!p || !p->scoreboard_shm) {
       return (remaining_choices == 0) ? 0 : -1;
   }
-  return srlb_sa_apache_policy_server_is_available (p);
+  return remaining_choices != 0 &&
+      !srlb_sa_apache_policy_server_is_available (p);
 }
 
 static void

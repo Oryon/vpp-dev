@@ -113,7 +113,21 @@ int srlb_sa_lru_config (srlb_sa_lru_config_args_t *args)
   else if (args->flags & SRLB_SA_LRU_FLAGS_OPAQUE_INDEX_SET)
     {
       /* Update */
-      return VNET_API_ERROR_UNIMPLEMENTED;
+      if (pool_is_free_index(lrum->policies, args->opaque_index))
+        return VNET_API_ERROR_NO_SUCH_ENTRY;
+
+      lru = pool_elt_at_index(lrum->policies, args->opaque_index);
+
+      if ((args->flags & SRLB_SA_LRU_FLAGS_OBJECT_SIZE_SET) ||
+          (args->flags & SRLB_SA_LRU_FLAGS_ENTRIES_SET))
+        return VNET_API_ERROR_UNIMPLEMENTED;
+
+      if (args->flags & SRLB_SA_LRU_FLAGS_THRESHOLD_SET)
+        {
+          lru->threshold = args->threshold;
+          u32 cats[SRLB_LRU_CAT_N] = { [0] = lru->threshold };
+          srlb_lru_resize(&lru->lru, cats);
+        }
     }
   else
     {

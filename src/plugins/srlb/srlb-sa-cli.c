@@ -344,3 +344,66 @@ VLIB_CLI_COMMAND (srlb_show_sa_accept_policies_command, static) =
 	.short_help = "show srlb sa accept-policies",
 	.function = srlb_show_sa_accept_policies_command_fn,
     };
+
+
+clib_error_t *
+test_srlb_sa_accept_callback_command_fn (vlib_main_t * vm,
+                                      unformat_input_t * input,
+                                      vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  clib_error_t *error = NULL;
+  u64 vip = 0;
+  ip6_address_t sr_prefix = {};
+  u32 choices_left = 0;
+
+  /* Get a line of input. */
+  if (!unformat_user (input, unformat_line_input, line_input))
+    return clib_error_return (0, "missing argument");
+
+  if (!unformat (line_input, "%U", unformat_ip6_address, &sr_prefix))
+    {
+      error = clib_error_return (0, "Invalid SR prefix");
+      goto done;
+    }
+
+  while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+    {
+      if (unformat(line_input, "vip %U",
+                   unformat_half_ip6_address, &vip))
+        ;
+      else if (unformat (line_input, "choices-left %u", &choices_left))
+        ;
+      else
+        {
+          error = clib_error_return (0, "parse error: '%U'",
+                                     format_unformat_error, line_input);
+          goto done;
+        }
+    }
+  unformat_free (line_input);
+
+  srlb_sa_ai_t *ai = srlb_sa_ai_get(&sr_prefix);
+  if (ai == NULL)
+    return clib_error_return (0, "Application instance with prefix %U not found",
+                                 format_ip6_address, &sr_prefix);
+
+  srlb_sa_main_t *sam = &srlb_sa_main;
+  u8 accept = !sam->accept_policies[ai->policy_index].
+      accept(ai - sam->ais, choices_left, vip);
+
+  vlib_cli_output(vm, "policy: %U %s", format_srlb_sa_accept_policy_index,
+                  ai->policy_index, accept?"accepted":"rejected");
+
+  done:
+  unformat_free (line_input);
+  return error;
+}
+
+VLIB_CLI_COMMAND (test_srlb_sa_accept_callback_command, static) =
+    {
+        .path = "test srlb sa accept-policy callback ",
+        .short_help = "test srlb sa accept-policy callback "
+            "<sr-prefix> choices-left <n> vip <0123:4567:89ab:cdef>",
+        .function = test_srlb_sa_accept_callback_command_fn,
+    };

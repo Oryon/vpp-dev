@@ -101,4 +101,7 @@ uword unformat_verbosity (unformat_input_t * input, va_list * args);
 uword unformat_u32_bitmask_list (unformat_input_t * input, va_list * va);
 u8 *format_u32_bitmask_list (u8 * s, va_list * args);
 
+uword unformat_half_ip6_address (unformat_input_t * input, va_list * args);
+u8 *format_half_ip6_address (u8 * s, va_list * va);
+
 #endif /* SRC_PLUGINS_SRLB_SRLB_COMMON_H_ */
