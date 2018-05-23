@@ -12,6 +12,7 @@
 # limitations under the License.
 
 vppplugins_LTLIBRARIES += srlb_agent_plugin.la
+vppapitestplugins_LTLIBRARIES += srlb_agent_test_plugin.la
 
 srlb_agent_plugin_la_SOURCES =			\
 	srlb/srlb-sa.c			\
@@ -22,13 +23,22 @@ srlb_agent_plugin_la_SOURCES =			\
 	srlb/srlb-sa-nginx.c    \
 	srlb/srlb-sa-cpuacct.c  \
 	srlb/srlb-lru.c         \
-	srlb/srlb-sa-lru.c
+	srlb/srlb-sa-lru.c      \
+	srlb/srlb-sa-api.c
 
 	
 noinst_HEADERS +=			\
 	srlb/srlb-sa.h		    \
-	srlb/srlb-sa-apache.h       \
+	srlb/srlb-sa-apache.h    \
 	srlb/srlb-common.h
+	
+BUILT_SOURCES +=	            \
+	srlb/srlb_sa.api.h      \
+	srlb/srlb_sa.api.json
 
+API_FILES += srlb/srlb_sa.api
+
+srlb_agent_test_plugin_la_SOURCES = \
+  srlb/srlb-sa-api-test.c srlb/srlb_sa.api.h
 
 # vi:syntax=automake

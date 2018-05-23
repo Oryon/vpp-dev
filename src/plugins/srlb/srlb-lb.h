@@ -446,6 +446,11 @@ typedef struct {
    */
   vlib_simple_counter_main_t counters;
 
+  /**
+   * SRLB LB plugin API message origin
+   */
+  u32 msg_id_base;
+
 } srlb_lb_main_t;
 
 extern srlb_lb_main_t srlb_lb_main;

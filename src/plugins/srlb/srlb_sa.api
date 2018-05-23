@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2018 Cisco and/or its affiliates.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/** \file
+    This file defines SRLB Server Agent API messages.
+*/
+
+option version = "1.0.0";
+
+
+/** \brief Queries SRLB Server Agent global parameters.
+    @param client_index - opaque cookie to identify the sender
+    @param context - sender context, to match reply w/ request
+*/
+define srlb_sa_get_conf
+{
+  u32 client_index;
+  u32 context;
+};
+
+/** \brief Reply for srlb_sa_get_conf query.
+    @param context - sender context, to match reply w/ request
+    @param retval - returned status
+    @param flow_active_timeout - Time in seconds a flow is kept in the 
+                                 flow table.
+    @param flow_teardown_timeout - Time in seconds a flow is kept in the
+                                 flow table when a flow termination packet
+                                 has been seen.
+    @param flowhash_fixed_entries - Number of fixed-entries in the flow table.
+    @param flowhash_collision_buckets - Number of collision entries in the 
+                                        flow table.
+*/
+define srlb_sa_get_conf_reply
+{
+  u32 context;
+  i32 retval;
+  u32 flow_active_timeout;
+  u32 flow_teardown_timeout;
+  u32 flowhash_fixed_entries;
+  u32 flowhash_collision_buckets;
+};
+
+/** \brief Configure SRLB Server Agent global parameters.
+    @param client_index - opaque cookie to identify the sender
+    @param context - sender context, to match reply w/ request
+    @param flow_active_timeout - Time in seconds a flow is kept in the 
+                                 flow table.
+    @param flow_teardown_timeout - Time in seconds a flow is kept in the
+                                 flow table when a flow termination packet
+                                 has been seen.
+    @param flowhash_fixed_entries - Number of fixed-entries in the flow table.
+    @param flowhash_collision_buckets - Number of collision entries in the 
+                                        flow table.
+*/
+autoreply define srlb_sa_conf
+{
+  u32 client_index;
+  u32 context;
+  u32 flow_active_timeout;
+  u32 flow_teardown_timeout;
+  u32 flowhash_fixed_entries;
+  u32 flowhash_collision_buckets;
+};
+
+/** \brief Creates, modifies or deletes an SRLB Server-Agent service
+           identified by the SR prefix used to communicate with the 
+           Load-Balancer.
+    @param client_index - opaque cookie to identify the sender
+    @param context - sender context, to match reply w/ request
+    @param routing_address - Next-hop address of the application instance.
+    @param sr_prefix - SR prefix used by the Server Agent, for this app, 
+               for communications with the Load-Balancer.
+    @param sr_prefix_length - SR prefix length for this VIP.
+               Must be set to 80 for now.
+    @param handoff_thread - Index of the thread handling those packets.
+    @param policy_index - Accept policy for new flow
+    @param policy_opaque - Opaque value used by the accept policy.
+    @param is_del - Whether this app instance should be deleted.
+*/
+autoreply define srlb_sa_app_conf
+{
+  u32 client_index;
+  u32 context;
+  u8 routing_address[16];
+  u8 sr_prefix[16];
+  u8 sr_prefix_length;
+  u32 handoff_thread;
+  u32 policy_index;
+  u32 policy_opaque;
+  u8 is_del;
+};
+
+/** \brief Enable of disable the Server Agent feature on a given interface.
+    @param client_index - opaque cookie to identify the sender
+    @param context - sender context, to match reply w/ request
+    @param sw_if_index - Software interface index.
+    @param is_enable - Whether to enable or disable the feature.
+*/
+autoreply define srlb_sa_feature_enable_disable
+{
+  u32 client_index;
+  u32 context;
+  u32 sw_if_index;
+  u8 is_enable;
+};

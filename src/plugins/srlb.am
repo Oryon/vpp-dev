@@ -12,16 +12,28 @@
 # limitations under the License.
 
 vppplugins_LTLIBRARIES += srlb_plugin.la
+vppapitestplugins_LTLIBRARIES += srlb_test_plugin.la
 
 srlb_plugin_la_SOURCES =			\
 	srlb/srlb-lb.c				\
 	srlb/srlb-lb-node.c		\
 	srlb/srlb-lb-cli.c      \
-	srlb/srlb-common.c
+	srlb/srlb-common.c      \
+	srlb/srlb-lb-api.c
 
 noinst_HEADERS +=			\
 	srlb/srlb-lb.h				\
 	srlb/srlb-common.h      \
-	srlb/srlb-lb.h
+	srlb/srlb-lb.h          \
+	srlb/srlb_lb.api.h
+
+BUILT_SOURCES +=	           \
+	srlb/srlb_lb.api.h      \
+	srlb/srlb_lb.api.json
+
+API_FILES += srlb/srlb_lb.api
+
+srlb_test_plugin_la_SOURCES = \
+  srlb/srlb-lb-api-test.c srlb/srlb_lb.api.h srlb/srlb-common.c
 
 # vi:syntax=automake

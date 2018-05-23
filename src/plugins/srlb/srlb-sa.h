@@ -390,6 +390,9 @@ typedef struct {
   /** Server Agent log level */
   u8 log_level;
 
+  /** First API message ID for the SRLB SA plugin */
+  u32 msg_id_base;
+
 } srlb_sa_main_t;
 
 extern srlb_sa_main_t srlb_sa_main;

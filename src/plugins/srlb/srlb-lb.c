@@ -961,10 +961,21 @@ srlb_lb_vip_conf (srlb_lb_vip_conf_args_t *args)
         return VNET_API_ERROR_INVALID_SRC_ADDRESS;
 
       /* fib indexes are immutable */
-      if ((args->flags & (SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET |
-          SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET |
-          SRLB_LB_API_FLAGS_SR_RX_FIB_SET |
-          SRLB_LB_API_FLAGS_SR_TX_FIB_SET)))
+
+      if ((args->flags & SRLB_LB_API_FLAGS_CLIENT_RX_FIB_SET) &&
+          (vip->client_rx_fib_index != args->client_rx_fib_index))
+        return VNET_API_ERROR_UNSUPPORTED;
+
+      if ((args->flags & SRLB_LB_API_FLAGS_CLIENT_TX_FIB_SET) &&
+          (vip->client_tx_fib_index != args->client_tx_fib_index))
+        return VNET_API_ERROR_UNSUPPORTED;
+
+      if ((args->flags & SRLB_LB_API_FLAGS_SR_RX_FIB_SET) &&
+          (vip->sr_rx_fib_index != args->sr_rx_fib_index))
+        return VNET_API_ERROR_UNSUPPORTED;
+
+      if ((args->flags & SRLB_LB_API_FLAGS_SR_TX_FIB_SET) &&
+          (vip->sr_tx_fib_index != args->sr_tx_fib_index))
         return VNET_API_ERROR_UNSUPPORTED;
     }
 
