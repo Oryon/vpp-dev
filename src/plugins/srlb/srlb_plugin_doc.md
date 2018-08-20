@@ -1,11 +1,5 @@
 # Segment Routing based Load Balancer    {#srlb_plugin_doc}
 
-***
-/!\
-This document contains Cisco confidential information that should only be disclosed under NDA.
-/!\
-***
-
 The Segment Routing Load Balancer is a specific type of load balancer leveraging IPv6 Segment Routing in order to dispatch new connection requests (e.g. TCP SYNs) to an ordered list of candidate servers, which in turn decide based on local policy, traffic, and system monitoring, whether to accept the connection or let it go to the next candidate.
 
 The list of candidate servers for a given flow is computed using an algorithm derived from Google's *Maglev* consistent hashing load-balancer. Consistent hashing in general, and *Maglev* in particular, provide good resiliency to deny of service attacks and enable multiple load-balancers to be deployed in parrallel without state synchronization.
@@ -16,12 +10,21 @@ SRLB therefore combines load-aware load-balancing with consistent hashing algori
 
 This document focuses on the implementation and usability aspects of SRLB VPP Plugin. Architectural and protocol details may be found here:
 
-- [The Power of Two Choices in Randomized Load Balancing](https://www.eecs.harvard.edu/~michaelm/postscripts/tpds2001.pdf)
-- [Google's Maglev](https://research.google.com/pubs/pub44824.html)
 - [SRLB: The Power of Choices in Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/7980143/)
 - [6LB: Scalable and Application-Aware Load Balancing with Segment Routing](http://ieeexplore.ieee.org/document/8293698/)
 
+This work was largely inspired by the following work:
+
+- [The Power of Two Choices in Randomized Load Balancing](https://www.eecs.harvard.edu/~michaelm/postscripts/tpds2001.pdf)
+- [Google's Maglev](https://research.google.com/pubs/pub44824.html)
+
+SRLB has been demonstrated at KubeCon (May 2-4, 2018).
+
+- [Slides](https://schd.ws/hosted_files/kccnceu18/09/SRv6LB-Kubecon-May-2018-townsley-pfister.pdf)
+- [Video](https://youtu.be/RRKUeyFaqEA)
+
 ### VPP Plugin Maintainers
+
 - Pierre Pfister <ppfister@cisco.com>
 - Yoann Desmouceaux <ydesmouc@cisco.com>
 
