@@ -279,7 +279,8 @@ esp_encrypt_inline (vlib_main_t * vm,
 	      oh0->ip4.src_address.as_u32 = sa0->tunnel_src_addr.ip4.as_u32;
 	      oh0->ip4.dst_address.as_u32 = sa0->tunnel_dst_addr.ip4.as_u32;
 
-	      vnet_buffer (o_b0)->sw_if_index[VLIB_TX] = (u32) ~ 0;
+	      vnet_buffer (o_b0)->sw_if_index[VLIB_TX] = (u32) sa0->tx_fib;
+            clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	    }
 	  else if (is_ip6 && sa0->is_tunnel && sa0->is_tunnel_ip6)
 	    {
@@ -293,6 +294,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 		sa0->tunnel_dst_addr.ip6.as_u64[1];
 
 	      vnet_buffer (o_b0)->sw_if_index[VLIB_TX] = (u32) ~ 0;
+            clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	    }
 	  else
 	    {
@@ -312,6 +314,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 		    vnet_buffer (i_b0)->sw_if_index[VLIB_TX];
 		}
 	      vlib_buffer_advance (i_b0, ip_udp_hdr_size);
+            clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	    }
 
 	  ASSERT (sa0->crypto_alg < IPSEC_CRYPTO_N_ALG);
@@ -361,7 +364,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 			       IV_SIZE, BLOCK_SIZE * blocks,
 			       sa0->crypto_key, iv);
 	    }
-
+clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	  o_b0->current_length += hmac_calc (sa0->integ_alg, sa0->integ_key,
 					     sa0->integ_key_len,
 					     (u8 *) o_esp0,
@@ -371,7 +374,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 					     o_b0->current_length,
 					     sa0->use_esn, sa0->seq_hi);
 
-
+clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	  if (is_ip6)
 	    {
 	      oh6_0->ip6.payload_length =
@@ -394,6 +397,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 
 	  if (transport_mode)
 	    vlib_buffer_reset (o_b0);
+        clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 
 	trace:
 	  if (PREDICT_FALSE (i_b0->flags & VLIB_BUFFER_IS_TRACED))
@@ -411,7 +415,7 @@ esp_encrypt_inline (vlib_main_t * vm,
 		  tr->integ_alg = sa0->integ_alg;
 		}
 	    }
-
+clib_warning("%p %u", o_b0, vnet_buffer (o_b0)->sw_if_index[VLIB_TX]);
 	  vlib_validate_buffer_enqueue_x1 (vm, node, next_index,
 					   to_next, n_left_to_next, o_bi0,
 					   next0);

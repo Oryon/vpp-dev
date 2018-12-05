@@ -18,6 +18,7 @@
 #include <vnet/vnet.h>
 #include <vnet/api_errno.h>
 #include <vnet/ip/ip.h>
+#include <vnet/feature/feature.h>
 
 #include <vnet/ipsec/ipsec.h>
 #include <vnet/ipsec/esp.h>
@@ -59,9 +60,10 @@ format_ipsec_if_input_trace (u8 * s, va_list * args)
   return s;
 }
 
-VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
-				    vlib_node_runtime_t * node,
-				    vlib_frame_t * from_frame)
+static_always_inline uword
+ipsec_if_input_node_inline (vlib_main_t * vm,
+			    vlib_node_runtime_t * node,
+			    vlib_frame_t * from_frame, u8 is_input_feature)
 {
   ipsec_main_t *im = &ipsec_main;
   vnet_main_t *vnm = im->vnet_main;
@@ -106,17 +108,46 @@ VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
 	  to_next += 1;
 	  n_left_to_next -= 1;
 	  b0 = vlib_get_buffer (vm, bi0);
+
 	  ip0 = vlib_buffer_get_current (b0);
-	  esp0 = (esp_header_t *) ((u8 *) ip0 + ip4_header_bytes (ip0));
-
-	  next0 = IPSEC_INPUT_NEXT_DROP;
-
-	  u64 key = (u64) ip0->src_address.as_u32 << 32 |
-	    (u64) clib_net_to_host_u32 (esp0->spi);
-
-	  p = hash_get (im->ipsec_if_pool_index_by_key, key);
-
 	  len0 = vlib_buffer_length_in_chain (vm, b0);
+
+	  if (is_input_feature)
+	    {
+	      p = NULL;
+	      esp0 = NULL;
+	      if (PREDICT_TRUE
+		  (ip0->protocol == IP_PROTOCOL_IPSEC_ESP
+		   || ip0->protocol == IP_PROTOCOL_UDP))
+		{
+		  esp0 =
+		    (esp_header_t *) ((u8 *) ip0 + ip4_header_bytes (ip0));
+		  if (PREDICT_FALSE (ip0->protocol == IP_PROTOCOL_UDP))
+		    {
+		      esp0 =
+			(esp_header_t *) ((u8 *) esp0 +
+					  sizeof (udp_header_t));
+		    }
+
+		  u64 key = (u64) ip0->src_address.as_u32 << 32 |
+		    (u64) clib_net_to_host_u32 (esp0->spi);
+
+		  p = hash_get (im->ipsec_if_pool_index_by_key, key);
+
+		}
+
+	      vnet_feature_next_with_data (&next0, b0, 0);
+	    }
+	  else
+	    {
+	      esp0 = (esp_header_t *) ((u8 *) ip0 + ip4_header_bytes (ip0));
+	      u64 key = (u64) ip0->src_address.as_u32 << 32 |
+		(u64) clib_net_to_host_u32 (esp0->spi);
+
+	      p = hash_get (im->ipsec_if_pool_index_by_key, key);
+
+	      next0 = IPSEC_INPUT_NEXT_DROP;
+	    }
 
 	  if (p)
 	    {
@@ -178,7 +209,7 @@ VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
 		  vnet_buffer (b0)->ipsec.flags = IPSEC_FLAG_IPSEC_GRE_TUNNEL;
 		}
 
-	      vlib_buffer_advance (b0, ip4_header_bytes (ip0));
+	      vlib_buffer_advance (b0, ((u8 *) esp0) - ((u8 *) ip0));
 	      next0 = im->esp4_decrypt_next_index;
 	    }
 
@@ -187,8 +218,17 @@ VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
 	    {
 	      ipsec_if_input_trace_t *tr =
 		vlib_add_trace (vm, node, b0, sizeof (*tr));
-	      tr->spi = clib_host_to_net_u32 (esp0->spi);
-	      tr->seq = clib_host_to_net_u32 (esp0->seq);
+	      if (esp0 != NULL)
+		{
+		  tr->spi = clib_host_to_net_u32 (esp0->spi);
+		  tr->seq = clib_host_to_net_u32 (esp0->seq);
+		}
+	      else
+		{
+		  tr->spi = ~0;
+		  tr->seq = ~0;
+		}
+
 	    }
 
 	  vlib_validate_buffer_enqueue_x1 (vm, node, next_index, to_next,
@@ -220,6 +260,13 @@ VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
   return from_frame->n_vectors;
 }
 
+VLIB_NODE_FN (ipsec_if_input_node) (vlib_main_t * vm,
+				    vlib_node_runtime_t * node,
+				    vlib_frame_t * from_frame)
+{
+  return ipsec_if_input_node_inline (vm, node, from_frame, 0);
+}
+
 /* *INDENT-OFF* */
 VLIB_REGISTER_NODE (ipsec_if_input_node) = {
   .name = "ipsec-if-input",
@@ -233,6 +280,32 @@ VLIB_REGISTER_NODE (ipsec_if_input_node) = {
   .sibling_of = "ipsec4-input",
 };
 /* *INDENT-ON* */
+
+VLIB_NODE_FN (ipsec_if_input_feat_node) (vlib_main_t * vm,
+					 vlib_node_runtime_t * node,
+					 vlib_frame_t * from_frame)
+{
+  return ipsec_if_input_node_inline (vm, node, from_frame, 1);
+}
+
+/* *INDENT-OFF* */
+VLIB_REGISTER_NODE (ipsec_if_input_feat_node) = {
+  .name = "ipsec-if-input-feat",
+  .vector_size = sizeof (u32),
+  .format_trace = format_ipsec_if_input_trace,
+  .type = VLIB_NODE_TYPE_INTERNAL,
+
+  .n_errors = ARRAY_LEN(ipsec_if_input_error_strings),
+  .error_strings = ipsec_if_input_error_strings,
+
+  .sibling_of = "ipsec4-input",
+};
+/* *INDENT-ON* */
+
+VNET_FEATURE_INIT (srv6_as4_rewrite, static) =
+{
+.arc_name = "ip4-unicast",.node_name = "ipsec-if-input-feat",.runs_before =
+    0,};
 
 /*
  * fd.io coding-style-patch-verification: ON

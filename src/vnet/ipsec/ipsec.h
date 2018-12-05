@@ -147,6 +147,8 @@ typedef struct
   u32 last_seq;
   u32 last_seq_hi;
   u64 replay_window;
+    
+  u32 tx_fib;
 
   /* lifetime data */
   u64 total_data_size;
@@ -183,6 +185,7 @@ typedef struct
   u8 renumber;
   u32 show_instance;
   u8 udp_encap;
+  u32 tx_fib;
 } ipsec_add_del_tunnel_args_t;
 
 typedef struct
@@ -431,6 +434,8 @@ extern vlib_node_registration_t ipsec_if_input_node;
  */
 int ipsec_set_interface_spd (vlib_main_t * vm, u32 sw_if_index, u32 spd_id,
 			     int is_add);
+int ipsec_set_interface_vti (vlib_main_t * vm, u32 sw_if_index,
+			     int is_enable);
 int ipsec_add_del_spd (vlib_main_t * vm, u32 spd_id, int is_add);
 int ipsec_add_del_policy (vlib_main_t * vm, ipsec_policy_t * policy,
 			  int is_add);
@@ -479,8 +484,15 @@ ipsec_alloc_empty_buffers (vlib_main_t * vm, ipsec_main_t * im)
 
       n_alloc = vlib_buffer_alloc (vm, im->empty_buffers[thread_index] + l,
 				   2 * VLIB_FRAME_SIZE - l);
+        
+        for (int i = 0; i < n_alloc; i++)     {
+            vlib_buffer_t *b = vlib_get_buffer (vm, im->empty_buffers[thread_index][l + i]);
+            vnet_buffer(b)->sw_if_index[VLIB_TX] = ~0;
+        }
 
       _vec_len (im->empty_buffers[thread_index]) = l + n_alloc;
+        
+        
     }
 }
 

@@ -41,6 +41,20 @@ ipsec_get_sa_index_by_sa_id (u32 sa_id)
 }
 
 int
+ipsec_set_interface_vti (vlib_main_t * vm, u32 sw_if_index, int is_enable)
+{
+  if (sw_if_index == ~0)
+    {
+      return VNET_API_ERROR_SYSCALL_ERROR_1;
+    }
+
+  clib_warning ("%d", is_enable);
+  vnet_feature_enable_disable ("ip4-unicast", "ipsec-if-input-feat",
+			       sw_if_index, is_enable, NULL, 0);
+  return 0;
+}
+
+int
 ipsec_set_interface_spd (vlib_main_t * vm, u32 sw_if_index, u32 spd_id,
 			 int is_add)
 {

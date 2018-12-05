@@ -670,8 +670,8 @@ show_ipsec_command_fn (vlib_main_t * vm,
     hi = vnet_get_hw_interface (im->vnet_main, t->hw_if_index);
     vlib_cli_output(vm, "  %s seq", hi->name);
     sa = pool_elt_at_index(im->sad, t->output_sa_index);
-    vlib_cli_output(vm, "   seq %u seq-hi %u esn %u anti-replay %u udp-encap %u",
-                    sa->seq, sa->seq_hi, sa->use_esn, sa->use_anti_replay, sa->udp_encap);
+    vlib_cli_output(vm, "   seq %u seq-hi %u esn %u anti-replay %u udp-encap %u tx-fib %u",
+                    sa->seq, sa->seq_hi, sa->use_esn, sa->use_anti_replay, sa->udp_encap, sa->tx_fib);
     vlib_cli_output(vm, "   local-spi %u local-ip %U", sa->spi,
                     format_ip4_address, &sa->tunnel_src_addr.ip4);
     vlib_cli_output(vm, "   local-crypto %U %U",
@@ -893,12 +893,9 @@ create_ipsec_tunnel_command_fn (vlib_main_t * vm,
 
   while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
     {
-      if (unformat
-	  (line_input, "local-ip %U", unformat_ip4_address, &a.local_ip))
+      if (unformat (line_input, "local-ip %U", unformat_ip4_address, &a.local_ip))
 	num_m_args++;
-      else
-	if (unformat
-	    (line_input, "remote-ip %U", unformat_ip4_address, &a.remote_ip))
+      else if (unformat (line_input, "remote-ip %U", unformat_ip4_address, &a.remote_ip))
 	num_m_args++;
       else if (unformat (line_input, "local-spi %u", &a.local_spi))
 	num_m_args++;
@@ -910,6 +907,10 @@ create_ipsec_tunnel_command_fn (vlib_main_t * vm,
 	a.is_add = 0;
       else if (unformat (line_input, "udp-encap"))
 	a.udp_encap = 1;
+      else if (unformat (line_input, "tx-fib %u", &a.tx_fib))
+      {
+	;
+      }
       else
 	{
 	  error = clib_error_return (0, "unknown input `%U'",
@@ -1037,6 +1038,109 @@ VLIB_CLI_COMMAND (set_interface_key_command, static) = {
     .short_help =
     "set interface ipsec key <int> <local|remote> <crypto|integ> <key type> <key>",
     .function = set_interface_key_command_fn,
+};
+/* *INDENT-ON* */
+
+static clib_error_t *
+set_interface_vti_command_fn (vlib_main_t * vm,
+			      unformat_input_t * input,
+			      vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  ipsec_main_t *im = &ipsec_main;
+  u32 sw_if_index = (u32) ~ 0;
+  int is_enable = 1;
+  clib_error_t *error = NULL;
+
+  if (!unformat_user (input, unformat_line_input, line_input))
+    return 0;
+
+
+  while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+    {
+      if (unformat
+	  (line_input, "%U", unformat_vnet_sw_interface, im->vnet_main,
+	   &sw_if_index))
+	;
+      else if (unformat (line_input, "enable"))
+	is_enable = 1;
+      else if (unformat (line_input, "disable"))
+	is_enable = 0;
+      else
+	{
+	  error = clib_error_return (0, "parse error: '%U'",
+				     format_unformat_error, line_input);
+	  goto done;
+	}
+    }
+
+  ipsec_set_interface_vti (vm, sw_if_index, is_enable);
+
+done:
+  unformat_free (line_input);
+
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (set_interface_vti_command, static) = {
+    .path = "set interface ipsec vti",
+    .short_help =
+    "set interface ipsec vti <int> <enable|disable>",
+    .function = set_interface_vti_command_fn,
+};
+/* *INDENT-ON* */
+
+static clib_error_t *
+set_interface_sa_command_fn (vlib_main_t * vm,
+			     unformat_input_t * input,
+			     vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  ipsec_main_t *im = &ipsec_main;
+  u32 hw_if_index = (u32) ~ 0;
+  u32 sa = ~0;
+  int is_outbound = 0;
+  clib_error_t *error = NULL;
+
+  if (!unformat_user (input, unformat_line_input, line_input))
+    return 0;
+
+  if (unformat
+      (line_input, "%U %u", unformat_vnet_hw_interface, im->vnet_main,
+       &hw_if_index, &sa))
+    ;
+  else if (unformat (line_input, "outbound"))
+    is_outbound = 1;
+  else if (unformat (line_input, "inbound"))
+    is_outbound = 0;
+  else
+    {
+      error = clib_error_return (0, "parse error: '%U'",
+				 format_unformat_error, line_input);
+      goto done;
+    }
+
+  if (hw_if_index == (u32) ~ 0)
+    {
+      error = clib_error_return (0, "interface not specified");
+      goto done;
+    }
+
+  ipsec_set_interface_sa (im->vnet_main, hw_if_index, sa, is_outbound);
+
+done:
+  unformat_free (line_input);
+
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (set_interface_sa_command, static) = {
+    .path = "set interface ipsec sa",
+    .short_help =
+    "set interface ipsec sa <int> <sa-id> [inbound|outbound]",
+    .function = set_interface_sa_command_fn,
 };
 /* *INDENT-ON* */
 
